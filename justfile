@@ -1,4 +1,10 @@
 
+
+_default:
+  just --choose
+
+all: config && build
+
 build:
   cmake --build profiler/build --config Release --parallel
 

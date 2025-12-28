@@ -185,7 +185,6 @@ endif()
 
 find_package(Threads REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE TracyServer TracyImGui Threads::Threads)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wno-error=missing-exception-spec)
 
 if(NOT DEFINED GIT_REV)
     set(GIT_REV "HEAD")

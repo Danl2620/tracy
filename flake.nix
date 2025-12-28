@@ -20,9 +20,9 @@
       ];
 
     };
-    llvm = pkgs.llvmPackages_19;
+    # llvm = pkgs.llvmPackages_19;
     mkShell = pkgs.mkShell.override {
-        stdenv = llvm.stdenv;
+        # stdenv = llvm.stdenv;
         };
   in {
     devShells.default = mkShell rec {
@@ -32,8 +32,8 @@
 
       buildInputs = with pkgs; [
         # Development Tools
-        llvm.clang
-        llvm.bintools
+        # llvm.clang
+        # llvm.bintools
         clang-tools
         cmake
         cmakeCurses
@@ -41,7 +41,6 @@
         capstone
 
         # Development time dependencies
-        gtest
         catch2_3
 
         # Build time and Run time dependencies
