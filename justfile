@@ -1,12 +1,14 @@
+set shell := ["bash", "-cu"]
 
+# Build project with CMake into the `build/` directory
+# Usage: `just build` or override jobs: `JOBS=4 just build`
+build dir=".":
+   #!/usr/bin/env bash
+   mkdir -p {{dir}}/build
+   JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)}"
+   cmake -S {{dir}} -B {{dir}}/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -G "Ninja"
+   cmake --build {{dir}}/build -- -j${JOBS}
 
-_default:
-  just --choose
+package:
+  nix build -Lvvv
 
-all: config && build
-
-build:
-  cmake --build profiler/build --config Release --parallel
-
-config:
-  cmake -B profiler/build -S profiler -DCMAKE_BUILD_TYPE=Release
