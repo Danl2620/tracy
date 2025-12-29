@@ -68,6 +68,7 @@ stdenv.mkDerivation rec {
     "-DBUILD_SHARED_LIBS=0"
     "-DDOWNLOAD_CAPSTONE=OFF"
     "-DDOWNLOAD_IMGUI=OFF"
+    "-DTRACY_IMGUI_SOURCE_DIR=${imgui}/include/imgui"
   ];
 
   # Prevent CPM from trying to download packages

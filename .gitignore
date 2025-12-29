@@ -35,3 +35,4 @@ profiler/build/wasm/Tracy-release.*
 profiler/build/wasm/Tracy-debug.*
 profiler/build/wasm/embed.tracy
 build
+build.log

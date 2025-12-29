@@ -132,12 +132,32 @@ target_include_directories(TracyGetOpt PUBLIC ${GETOPT_DIR})
 
 # ImGui
 
-pkg_check_modules(IMGUI imgui)
-if(IMGUI_FOUND AND NOT DOWNLOAD_IMGUI)
-    message(STATUS "ImGui found: ${IMGUI}")
-    add_library(TracyImGui INTERFACE)
-    target_include_directories(TracyImGui INTERFACE ${IMGUI_INCLUDE_DIRS})
-    target_link_libraries(TracyImGui INTERFACE ${IMGUI_LINK_LIBRARIES})
+set(TRACY_IMGUI_SOURCE_DIR "" CACHE PATH "Path to imgui source directory (when DOWNLOAD_IMGUI=OFF)")
+
+if(NOT DOWNLOAD_IMGUI)
+    # Try to find imgui sources in system paths or user-specified path
+    if(TRACY_IMGUI_SOURCE_DIR)
+        set(_IMGUI_SEARCH_PATHS "${TRACY_IMGUI_SOURCE_DIR}")
+    else()
+        set(_IMGUI_SEARCH_PATHS
+            "/usr/include/imgui"
+            "/usr/local/include/imgui"
+        )
+    endif()
+
+    foreach(_path ${_IMGUI_SEARCH_PATHS})
+        if(EXISTS "${_path}/imgui.h")
+            set(_IMGUI_FOUND_DIR "${_path}")
+            break()
+        endif()
+    endforeach()
+
+    if(_IMGUI_FOUND_DIR)
+        message(STATUS "ImGui found: ${_IMGUI_FOUND_DIR}")
+        set(ImGui_SOURCE_DIR "${_IMGUI_FOUND_DIR}")
+    else()
+        message(FATAL_ERROR "DOWNLOAD_IMGUI=OFF but imgui sources not found. Set TRACY_IMGUI_SOURCE_DIR or enable DOWNLOAD_IMGUI.")
+    endif()
 else()
     CPMAddPackage(
         NAME ImGui
@@ -148,27 +168,27 @@ else()
             "${CMAKE_CURRENT_LIST_DIR}/imgui-emscripten.patch"
             "${CMAKE_CURRENT_LIST_DIR}/imgui-loader.patch"
     )
+endif()
 
-    set(IMGUI_SOURCES
-        imgui_widgets.cpp
-        imgui_draw.cpp
-        imgui_demo.cpp
-        imgui.cpp
-        imgui_tables.cpp
-        misc/freetype/imgui_freetype.cpp
-        backends/imgui_impl_opengl3.cpp
-    )
+set(IMGUI_SOURCES
+    imgui_widgets.cpp
+    imgui_draw.cpp
+    imgui_demo.cpp
+    imgui.cpp
+    imgui_tables.cpp
+    misc/freetype/imgui_freetype.cpp
+    backends/imgui_impl_opengl3.cpp
+)
 
-    list(TRANSFORM IMGUI_SOURCES PREPEND "${ImGui_SOURCE_DIR}/")
+list(TRANSFORM IMGUI_SOURCES PREPEND "${ImGui_SOURCE_DIR}/")
 
-    add_library(TracyImGui STATIC EXCLUDE_FROM_ALL ${IMGUI_SOURCES})
-    target_include_directories(TracyImGui PUBLIC ${ImGui_SOURCE_DIR})
-    target_link_libraries(TracyImGui PUBLIC TracyFreetype)
-    target_compile_definitions(TracyImGui PRIVATE "IMGUI_ENABLE_FREETYPE")
+add_library(TracyImGui STATIC EXCLUDE_FROM_ALL ${IMGUI_SOURCES})
+target_include_directories(TracyImGui PUBLIC ${ImGui_SOURCE_DIR})
+target_link_libraries(TracyImGui PUBLIC TracyFreetype)
+target_compile_definitions(TracyImGui PRIVATE "IMGUI_ENABLE_FREETYPE")
 
-    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_definitions(TracyImGui PRIVATE "IMGUI_DISABLE_DEBUG_TOOLS")
-    endif()
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(TracyImGui PRIVATE "IMGUI_DISABLE_DEBUG_TOOLS")
 endif()
 
 # NFD

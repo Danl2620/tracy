@@ -10,5 +10,7 @@ build dir=".":
    cmake --build {{dir}}/build -- -j${JOBS}
 
 package:
-  nix build -Lvvv
+  #!/usr/bin/env bash
+  set -o pipefail
+  nix build -Lvvv 2>&1 | tee build.log
 
