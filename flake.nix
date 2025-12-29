@@ -30,7 +30,7 @@
       # Update the name to something that suites your project.
         name = "message-proxy";
 
-      buildInputs = with pkgs; [
+      nativeBuildInputs = with pkgs; [
         # Development Tools
         # llvm.clang
         # llvm.bintools
@@ -39,10 +39,13 @@
         cmakeCurses
         blas
         capstone
+        ninja
 
         # Development time dependencies
         catch2_3
 
+      ];
+      buildInputs = with pkgs; [
         # Build time and Run time dependencies
         spdlog
         wayland
