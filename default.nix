@@ -5,6 +5,7 @@
 , cmake
 , pkg-config
 , capstone
+, imgui
 , freetype
 , glfw
 , tbb
@@ -35,6 +36,7 @@ stdenv.mkDerivation rec {
     cmake
     pkg-config
     capstone
+    imgui
   ];
 
   # Patch the CMakeLists to not use CPM for dependencies we provide
@@ -63,6 +65,9 @@ stdenv.mkDerivation rec {
     (lib.cmakeBool "LEGACY" legacyX11)
     "-DCPM_USE_LOCAL_PACKAGES=ON"
     "-DCPM_LOCAL_PACKAGES_ONLY=ON"
+    "-DBUILD_SHARED_LIBS=0"
+    "-DDOWNLOAD_CAPSTONE=OFF"
+    "-DDOWNLOAD_IMGUI=OFF"
   ];
 
   # Prevent CPM from trying to download packages

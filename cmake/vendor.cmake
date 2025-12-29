@@ -11,6 +11,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/CPM.cmake)
 option(DOWNLOAD_CAPSTONE "Force download capstone" ON)
 option(DOWNLOAD_GLFW "Force download glfw" OFF)
 option(DOWNLOAD_FREETYPE "Force download freetype" OFF)
+option(DOWNLOAD_IMGUI "Force download imgui" OFF)
 
 # capstone
 
@@ -131,35 +132,43 @@ target_include_directories(TracyGetOpt PUBLIC ${GETOPT_DIR})
 
 # ImGui
 
-CPMAddPackage(
-    NAME ImGui
-    GITHUB_REPOSITORY ocornut/imgui
-    GIT_TAG v1.91.9b-docking
-    DOWNLOAD_ONLY TRUE
-    PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/imgui-emscripten.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/imgui-loader.patch"
-)
+pkg_check_modules(IMGUI imgui)
+if(IMGUI_FOUND AND NOT DOWNLOAD_IMGUI)
+    message(STATUS "ImGui found: ${IMGUI}")
+    add_library(TracyImGui INTERFACE)
+    target_include_directories(TracyImGui INTERFACE ${IMGUI_INCLUDE_DIRS})
+    target_link_libraries(TracyImGui INTERFACE ${IMGUI_LINK_LIBRARIES})
+else()
+    CPMAddPackage(
+        NAME ImGui
+        GITHUB_REPOSITORY ocornut/imgui
+        GIT_TAG v1.91.9b-docking
+        DOWNLOAD_ONLY TRUE
+        PATCHES
+            "${CMAKE_CURRENT_LIST_DIR}/imgui-emscripten.patch"
+            "${CMAKE_CURRENT_LIST_DIR}/imgui-loader.patch"
+    )
 
-set(IMGUI_SOURCES
-    imgui_widgets.cpp
-    imgui_draw.cpp
-    imgui_demo.cpp
-    imgui.cpp
-    imgui_tables.cpp
-    misc/freetype/imgui_freetype.cpp
-    backends/imgui_impl_opengl3.cpp
-)
+    set(IMGUI_SOURCES
+        imgui_widgets.cpp
+        imgui_draw.cpp
+        imgui_demo.cpp
+        imgui.cpp
+        imgui_tables.cpp
+        misc/freetype/imgui_freetype.cpp
+        backends/imgui_impl_opengl3.cpp
+    )
 
-list(TRANSFORM IMGUI_SOURCES PREPEND "${ImGui_SOURCE_DIR}/")
+    list(TRANSFORM IMGUI_SOURCES PREPEND "${ImGui_SOURCE_DIR}/")
 
-add_library(TracyImGui STATIC EXCLUDE_FROM_ALL ${IMGUI_SOURCES})
-target_include_directories(TracyImGui PUBLIC ${ImGui_SOURCE_DIR})
-target_link_libraries(TracyImGui PUBLIC TracyFreetype)
-target_compile_definitions(TracyImGui PRIVATE "IMGUI_ENABLE_FREETYPE")
+    add_library(TracyImGui STATIC EXCLUDE_FROM_ALL ${IMGUI_SOURCES})
+    target_include_directories(TracyImGui PUBLIC ${ImGui_SOURCE_DIR})
+    target_link_libraries(TracyImGui PUBLIC TracyFreetype)
+    target_compile_definitions(TracyImGui PRIVATE "IMGUI_ENABLE_FREETYPE")
 
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(TracyImGui PRIVATE "IMGUI_DISABLE_DEBUG_TOOLS")
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_definitions(TracyImGui PRIVATE "IMGUI_DISABLE_DEBUG_TOOLS")
+    endif()
 endif()
 
 # NFD
