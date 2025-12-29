@@ -45,6 +45,9 @@
 
         # Build time and Run time dependencies
         spdlog
+        wayland
+        libxkbcommon
+        libglvnd
         # C++ standard library for macOS (provides -lc++)
         ##libcxx
         ##abseil-cpp
