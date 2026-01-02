@@ -34,14 +34,17 @@ stdenv.mkDerivation rec {
   pname = if withWayland then "tracy-wayland" else "tracy-glfw";
   version = "0.12.1";
 
-  # inherit src;
-  # src = lib.cleanSource ./.;
-  src = fetchFromGitHub {
-    owner = "wolfpld";
-    repo = "tracy";
-    rev = "v${version}";
-    hash = "sha256-JiLY/rCZVdFFq/taWmk8nzY868DEm8vhCf231tFjuIg=";
-  };
+  outputs = [ "out" "dev" ];
+
+  inherit src;
+
+  # optional: fetch source directly from GitHub to test
+  # src = fetchFromGitHub {
+  #   owner = "wolfpld";
+  #   repo = "tracy";
+  #   rev = "v${version}";
+  #   hash = "sha256-JiLY/rCZVdFFq/taWmk8nzY868DEm8vhCf231tFjuIg=";
+  # };
 
   patches = lib.optional (
     stdenv.hostPlatform.isDarwin && lib.versionOlder stdenv.hostPlatform.darwinMinVersion "11"
@@ -108,11 +111,16 @@ stdenv.mkDerivation rec {
   '';
 
   postInstall = ''
+    # Install profiler tools to $out
     install -D -m 0555 capture/build/tracy-capture -t $out/bin
     install -D -m 0555 csvexport/build/tracy-csvexport $out/bin
     install -D -m 0555 import/build/{tracy-import-chrome,tracy-import-fuchsia} -t $out/bin
     install -D -m 0555 profiler/build/tracy-profiler $out/bin/tracy
     install -D -m 0555 update/build/tracy-update -t $out/bin
+
+    # Move client library and headers to $dev
+    moveToOutput lib $dev
+    moveToOutput include $dev
   ''
   + lib.optionalString stdenv.hostPlatform.isLinux ''
     substituteInPlace extra/desktop/tracy.desktop \
