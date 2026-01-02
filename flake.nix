@@ -2,7 +2,7 @@
   description = "A template for Nix based C++ project setup.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     utils.url = "github:numtide/flake-utils";
   };
 
@@ -40,7 +40,8 @@
         blas
         capstone
         ninja
-
+        nativefiledialog-extended
+       
         # Development time dependencies
         catch2_3
 
@@ -77,6 +78,8 @@
       '';
     };
 
-    packages.default = pkgs.callPackage ./default.nix {};
+    packages.default = pkgs.callPackage ./extra/package.nix {
+      src = pkgs.lib.cleanSource ./.;
+    };
   });
 }

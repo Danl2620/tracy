@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tee:*)",
+      "Bash(nix-prefetch-github:*)",
+      "Bash(nix-prefetch-url:*)",
+      "Bash(nix hash convert:*)"
+    ]
+  }
+}
