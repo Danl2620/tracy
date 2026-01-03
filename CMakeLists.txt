@@ -160,61 +160,20 @@ endif()
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
-set_target_properties(TracyClient PROPERTIES VERSION ${PROJECT_VERSION})
+set_target_properties(TracyClient PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${TRACY_VERSION_MAJOR}
+    OUTPUT_NAME tracy)
 if(TRACY_Fortran)
-    set_target_properties(TracyClientF90 PROPERTIES VERSION ${PROJECT_VERSION})
+    set_target_properties(TracyClientF90 PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${TRACY_VERSION_MAJOR})
 endif()
 
-set(tracy_includes
-    ${TRACY_PUBLIC_DIR}/tracy/TracyC.h
-    ${TRACY_PUBLIC_DIR}/tracy/Tracy.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyCUDA.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyD3D11.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyD3D12.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyLua.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyMetal.hmm
-    ${TRACY_PUBLIC_DIR}/tracy/TracyOpenCL.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyOpenGL.hpp
-    ${TRACY_PUBLIC_DIR}/tracy/TracyVulkan.hpp)
-
-set(client_includes
-    ${TRACY_PUBLIC_DIR}/client/tracy_concurrentqueue.h
-    ${TRACY_PUBLIC_DIR}/client/tracy_rpmalloc.hpp
-    ${TRACY_PUBLIC_DIR}/client/tracy_SPSCQueue.h
-    ${TRACY_PUBLIC_DIR}/client/TracyKCore.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyArmCpuTable.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyCallstack.h
-    ${TRACY_PUBLIC_DIR}/client/TracyCallstack.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyCpuid.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyDebug.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyDxt1.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyFastVector.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyLock.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyProfiler.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyRingBuffer.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyScoped.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyStringHelpers.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracySysPower.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracySysTime.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracySysTrace.hpp
-    ${TRACY_PUBLIC_DIR}/client/TracyThread.hpp)
-
-set(common_includes
-    ${TRACY_PUBLIC_DIR}/common/tracy_lz4.hpp
-    ${TRACY_PUBLIC_DIR}/common/tracy_lz4hc.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyAlign.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyAlloc.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyApi.h
-    ${TRACY_PUBLIC_DIR}/common/TracyColor.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyForceInline.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyMutex.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyProtocol.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyQueue.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracySocket.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyStackFrames.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracySystem.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyUwp.hpp
-    ${TRACY_PUBLIC_DIR}/common/TracyYield.hpp)
+# Collect all headers for installation
+file(GLOB tracy_includes "${TRACY_PUBLIC_DIR}/tracy/*.h" "${TRACY_PUBLIC_DIR}/tracy/*.hpp" "${TRACY_PUBLIC_DIR}/tracy/*.hmm")
+file(GLOB client_includes "${TRACY_PUBLIC_DIR}/client/*.h" "${TRACY_PUBLIC_DIR}/client/*.hpp")
+file(GLOB common_includes "${TRACY_PUBLIC_DIR}/common/*.h" "${TRACY_PUBLIC_DIR}/common/*.hpp")
 
 install(TARGETS TracyClient
         EXPORT TracyConfig
@@ -259,12 +218,58 @@ install(EXPORT TracyConfig
         NAMESPACE Tracy::
         FILE TracyTargets.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
-include(CMakePackageConfigHelpers)
+
+# Generate package config files
 configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
         "${CMAKE_CURRENT_BINARY_DIR}/TracyConfig.cmake"
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/TracyConfig.cmake
+
+# Generate version file for find_package version checking
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/TracyConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/TracyConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/TracyConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
+
+# Generate pkg-config file
+set(TRACY_PC_REQUIRES_PRIVATE "")
+set(TRACY_PC_LIBS_PRIVATE "${CMAKE_DL_LIBS}")
+set(TRACY_PC_CFLAGS "")
+
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    list(APPEND TRACY_PC_LIBS_PRIVATE "-lws2_32 -ldbghelp")
+endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+    list(APPEND TRACY_PC_LIBS_PRIVATE "-lexecinfo")
+endif()
+
+if(TRACY_LIBUNWIND_BACKTRACE)
+    list(APPEND TRACY_PC_REQUIRES_PRIVATE "libunwind")
+    list(APPEND TRACY_PC_CFLAGS "-DTRACY_LIBUNWIND_BACKTRACE")
+endif()
+
+if(TRACY_DEBUGINFOD)
+    list(APPEND TRACY_PC_REQUIRES_PRIVATE "libdebuginfod")
+    list(APPEND TRACY_PC_CFLAGS "-DTRACY_DEBUGINFOD")
+endif()
+
+# Convert lists to space-separated strings
+string(REPLACE ";" " " TRACY_PC_REQUIRES_PRIVATE "${TRACY_PC_REQUIRES_PRIVATE}")
+string(REPLACE ";" " " TRACY_PC_LIBS_PRIVATE "${TRACY_PC_LIBS_PRIVATE}")
+string(REPLACE ";" " " TRACY_PC_CFLAGS "${TRACY_PC_CFLAGS}")
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/tracy.pc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/tracy.pc"
+    @ONLY)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/tracy.pc"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
 option(TRACY_CLIENT_PYTHON "Whether to build Tracy python client library" OFF)
 

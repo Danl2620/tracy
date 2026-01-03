@@ -3,4 +3,36 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Threads REQUIRED)
 
+# Tracy build configuration - these options were set when Tracy was built
+set(Tracy_ENABLE @TRACY_ENABLE@)
+set(Tracy_ON_DEMAND @TRACY_ON_DEMAND@)
+set(Tracy_CALLSTACK @TRACY_CALLSTACK@)
+set(Tracy_NO_CALLSTACK @TRACY_NO_CALLSTACK@)
+set(Tracy_LIBUNWIND_BACKTRACE @TRACY_LIBUNWIND_BACKTRACE@)
+set(Tracy_DEBUGINFOD @TRACY_DEBUGINFOD@)
+set(Tracy_STATIC @TRACY_STATIC@)
+
+# Handle optional dependencies based on build configuration
+if(Tracy_LIBUNWIND_BACKTRACE)
+    include(FindPkgConfig)
+    pkg_check_modules(libunwind REQUIRED IMPORTED_TARGET libunwind)
+endif()
+
+if(Tracy_DEBUGINFOD)
+    include(FindPkgConfig)
+    pkg_check_modules(libdebuginfod REQUIRED IMPORTED_TARGET libdebuginfod)
+endif()
+
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # MinGW requires ws2_32 and dbghelp
+    set(TRACY_PLATFORM_LIBS ws2_32 dbghelp)
+endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+    find_library(EXECINFO_LIBRARY NAMES execinfo REQUIRED)
+    set(TRACY_PLATFORM_LIBS ${EXECINFO_LIBRARY})
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/TracyTargets.cmake")
+
+check_required_components(Tracy)

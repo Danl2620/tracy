@@ -1,0 +1,14 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: Tracy
+Description: A real time, nanosecond resolution, remote telemetry profiler
+URL: https://github.com/wolfpld/tracy
+Version: @PROJECT_VERSION@
+Requires: threads
+Requires.private: @TRACY_PC_REQUIRES_PRIVATE@
+Libs: -L${libdir} -ltracy
+Libs.private: @TRACY_PC_LIBS_PRIVATE@
+Cflags: -I${includedir}/tracy @TRACY_PC_CFLAGS@
