@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
+# This CMakeLists.txt builds ONLY the TracyClient library.
+# It intentionally does NOT include cmake/vendor.cmake or cmake/server.cmake
+# to avoid pulling in profiler dependencies (ImGui, Capstone, GLFW, etc.).
+# The profiler and utilities are built separately via their own CMakeLists.txt files.
+
 # Run version helper script
 include(cmake/version.cmake)
 

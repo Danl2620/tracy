@@ -78,8 +78,16 @@
       '';
     };
 
-    packages.default = pkgs.callPackage ./extra/package.nix {
-      src = pkgs.lib.cleanSource ./.;
+    packages = {
+      # Full package with profiler GUI and all tools
+      default = pkgs.callPackage ./extra/package.nix {
+        src = pkgs.lib.cleanSource ./.;
+      };
+
+      # Client library only - minimal dependencies, no GUI
+      client = pkgs.callPackage ./extra/client-package.nix {
+        src = pkgs.lib.cleanSource ./.;
+      };
     };
   });
 }
