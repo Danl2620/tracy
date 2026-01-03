@@ -11,7 +11,8 @@ stdenv.mkDerivation (finalAttrs: {
   pname = "tracy-client";
   version = "0.12.1";
 
-  outputs = [ "out" "dev" ];
+  # Single output - everything in one place for simplicity
+  # The dev files (headers, cmake) are small and usually needed anyway
 
   inherit src;
 

@@ -49,8 +49,11 @@ cmake --build test/build
 ### Nix Build
 
 ```bash
-# Build everything using Nix flake
-nix build
+# Build client library only (lightweight, ~1.2MB)
+nix build .#client
+
+# Build full package with profiler GUI
+nix build .#default  # or just: nix build
 
 # Build with verbose logging
 just package  # Runs: nix build -Lvvv 2>&1 | tee build.log
@@ -58,6 +61,11 @@ just package  # Runs: nix build -Lvvv 2>&1 | tee build.log
 # Enter development shell
 nix develop
 ```
+
+**Nix Packages:**
+- `.#client` - Client library only (single output, minimal dependencies)
+- `.#default` - Full package with profiler GUI and all tools
+- See `docs/NIX_PACKAGES.md` for details
 
 ## Architecture
 

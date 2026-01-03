@@ -10,7 +10,8 @@
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(git add:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(du:*)"
     ]
   }
 }
