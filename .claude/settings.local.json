@@ -4,7 +4,10 @@
       "Bash(tee:*)",
       "Bash(nix-prefetch-github:*)",
       "Bash(nix-prefetch-url:*)",
-      "Bash(nix hash convert:*)"
+      "Bash(nix hash convert:*)",
+      "Bash(cmake:*)",
+      "Bash(nix develop:*)",
+      "Bash(ls:*)"
     ]
   }
 }
