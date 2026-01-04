@@ -35,27 +35,18 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
     cpmSrcs ? [],
     patches ? [],
     extraBuildInputs ? [],
-  }:
+  }: let
+    sourceRoot = "source";
+  in
     stdenv.mkDerivation {
       inherit patches;
 
       pname = "tracy";
       version = "${version}";
 
-      srcs =
-        [
-          src
-          # (fetchFromGitHub {
-          #   name = "tracy";
-          #   owner = "wolfpld";
-          #   repo = "tracy";
-          #   rev = "v${version}";
-          #   hash = "${srcHash}";
-          # })
-        ]
-        ++ cpmSrcs;
+      srcs = [src] ++ cpmSrcs;
 
-      sourceRoot = "tracy";
+      inherit sourceRoot;
 
       postUnpack = (
         lib.strings.concatLines (
@@ -69,7 +60,8 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
               # PPQSort tries to download CPM.cmake
               # Provide it the newer version from tracy instead
               + (lib.optionalString (s.name == "PPQSort") ''
-                cp ./tracy/cmake/CPM.cmake PPQSort/cmake/CPM.cmake
+                ls -l
+                cp ./${sourceRoot}/cmake/CPM.cmake PPQSort/cmake/CPM.cmake
               '')
           )
         )
