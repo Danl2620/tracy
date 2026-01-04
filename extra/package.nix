@@ -40,13 +40,12 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
   in
     stdenv.mkDerivation {
       inherit patches;
+      inherit sourceRoot;
 
       pname = "tracy";
       version = "${version}";
 
       srcs = [src] ++ cpmSrcs;
-
-      inherit sourceRoot;
 
       postUnpack = (
         lib.strings.concatLines (
@@ -60,7 +59,6 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
               # PPQSort tries to download CPM.cmake
               # Provide it the newer version from tracy instead
               + (lib.optionalString (s.name == "PPQSort") ''
-                ls -l
                 cp ./${sourceRoot}/cmake/CPM.cmake PPQSort/cmake/CPM.cmake
               '')
           )
@@ -96,9 +94,9 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
 
       cmakeFlags =
         [
-          "-DDOWNLOAD_CAPSTONE=off"
-          "-DTRACY_STATIC=off"
-          "-DCPM_LOCAL_PACKAGES_ONLY=on"
+          (lib.cmakeBool "DOWNLOAD_CAPSTONE" false)
+          (lib.cmakeBool "TRACY_STATIC" false)
+          (lib.cmakeBool "CPM_LOCAL_PACKAGES_ONLY" true)
         ]
         ++ lib.optional (stdenv.hostPlatform.isLinux && withGtkFileSelector) "-DGTK_FILESELECTOR=ON"
         ++ lib.optional (stdenv.hostPlatform.isLinux && !withWayland) "-DLEGACY=on";
@@ -165,25 +163,8 @@ assert withGtkFileSelector -> stdenv.hostPlatform.isLinux; let
       };
     };
 in rec {
-  tracy_0_11 = mkTracyPackage (
-    import ./tracy-0.11.nix {
-      inherit
-        lib
-        stdenv
-        capstone
-        wayland-protocols
-        ;
-    }
-  );
-
-  tracy_0_12 = mkTracyPackage (
-    import ./tracy-0.12.nix {
-      inherit fetchFromGitHub fetchFromGitLab;
-    }
-  );
-
-  tracy_0_13 = mkTracyPackage (
-    import ./tracy-0.13.nix {
+  tracy = mkTracyPackage (
+    import ./cpm-srcs.nix {
       inherit
         fetchFromGitHub
         fetchFromGitLab
@@ -193,6 +174,4 @@ in rec {
         ;
     }
   );
-
-  tracy = tracy_0_13;
 }
