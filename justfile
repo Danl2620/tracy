@@ -277,3 +277,10 @@ run-test: test
 [group: "05-run"]
 run-profiler: profiler
     ./profiler/build/tracy-profiler
+
+# ============================================================================
+# MODULE IMPORTS
+# ============================================================================
+
+# Import GitHub Actions CI tasks
+import? 'extra/actions.just'
