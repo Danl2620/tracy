@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(just:*)",
+      "Bash(curl:*)",
+      "Bash(git -C /home/danl/proj/tracy log --all --full-history --oneline -- justfile)",
+      "Bash(git -C /home/danl/proj/tracy show a4800ef9:justfile)",
+      "Bash(tar:*)",
+      "Bash(/tmp/just:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
