@@ -115,6 +115,33 @@
             libcurl = inputs.curl;
           };
 
+          # Fixed-output derivation for embed.tracy (required for WASM build)
+          embedTracy = pkgs.fetchurl {
+            url = "https://share.nereid.pl/i/embed.tracy";
+            hash = "sha256-XoRoxINIquvEB+iIK6EwtV/xVMKUk/5EQmvvEtPm3wI=";
+          };
+
+          # Native embed tool (needed for WASM build)
+          embedTool = pkgs.stdenv.mkDerivation {
+            pname = "tracy-embed";
+            version = "0.13.2";
+
+            src = ./.;
+
+            nativeBuildInputs = with pkgs; [ cmake ];
+
+            postUnpack = ''
+              # Only build the embed tool from helpers directory
+              cd $sourceRoot/profiler/helpers
+              sourceRoot="."
+            '';
+
+            installPhase = ''
+              mkdir -p $out/bin
+              cp embed $out/bin/
+            '';
+          };
+
         in {
           # Tracy Client Library
           tracy-client = pkgs.stdenv.mkDerivation {
@@ -228,6 +255,149 @@
               license = licenses.bsd3;
               platforms = platforms.unix;
               mainProgram = "tracy-profiler";
+            };
+          };
+
+          # Tracy Profiler WebAssembly Build
+          tracy-profiler-web = pkgs.emscriptenStdenv.mkDerivation rec {
+            pname = "tracy-profiler-web";
+            version = "0.13.2";
+
+            src = ./.;
+
+            nativeBuildInputs = with pkgs; [
+              cmake
+              ninja
+              python3
+              emscripten
+              zstd
+              gzip
+              embedTool  # Native embed tool for font/file embedding
+            ];
+
+            dontUseCmakeConfigure = true;
+
+            postUnpack = ''
+              # Copy CPM sources to writable locations (same as tracy-profiler)
+              ${pkgs.lib.concatStringsSep "\n" (pkgs.lib.mapAttrsToList (name: src: ''
+                cp -R ${src} ${name}
+                chmod -R u+w ${name}
+              '') cpmSources)}
+
+              # PPQSort needs the newer CPM.cmake from tracy
+              if [ -d PPQSort ] && [ -d $sourceRoot ]; then
+                cp $sourceRoot/cmake/CPM.cmake PPQSort/cmake/CPM.cmake
+              fi
+
+              # Patch dependencies to allow in-tree builds (required for CPM with Emscripten)
+              # These libraries have checks that prevent in-source builds, but CPM uses add_subdirectory
+              # which makes CMAKE_SOURCE_DIR == CMAKE_BINARY_DIR from the library's perspective
+
+              # Patch capstone
+              if [ -d capstone ]; then
+                sed -i '/CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR/,/endif()/d' capstone/CMakeLists.txt
+              fi
+
+              # Patch freetype (error at line 223) - remove just the check block
+              if [ -d freetype ]; then
+                sed -i '220,235d' freetype/CMakeLists.txt
+              fi
+
+              # Patch glfw if it has similar checks
+              if [ -d glfw ]; then
+                sed -i '/CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR/,/endif()/d' glfw/CMakeLists.txt || true
+              fi
+
+              # Patch profiler CMakeLists.txt to not download embed.tracy
+              if [ -d $sourceRoot/profiler ]; then
+                # Remove file DOWNLOAD line
+                sed -i '/file(DOWNLOAD.*embed.tracy/d' $sourceRoot/profiler/CMakeLists.txt
+
+                # Replace the ExternalProject_Add for embed with a dummy target
+                # This avoids building embed with Emscripten - we use the native one we copied
+                sed -i '/^ExternalProject_Add(embed$/,/^)$/{
+                  :a
+                  N
+                  /^)$/!ba
+                  c\
+# Using pre-built native embed tool from nativeBuildInputs\
+add_custom_target(embed ALL)
+                }' $sourceRoot/profiler/CMakeLists.txt
+              fi
+
+              # Copy embed.tracy file to profiler/build directory
+              mkdir -p $sourceRoot/profiler/build
+              cp ${embedTracy} $sourceRoot/profiler/build/embed.tracy
+
+              # Copy native embed tool so it can be used during build
+              cp ${embedTool}/bin/embed $sourceRoot/profiler/build/embed
+              chmod +x $sourceRoot/profiler/build/embed
+            '';
+
+            configurePhase = ''
+              runHook preConfigure
+
+              # Change to profiler directory
+              cd profiler
+
+              # Add CPM source flags
+              ${pkgs.lib.concatStringsSep "\n" (pkgs.lib.mapAttrsToList (name: src: ''
+                cmakeFlags="$cmakeFlags -DCPM_${name}_SOURCE=$NIX_BUILD_TOP/${name}"
+              '') cpmSources)}
+
+              # Run CMake with emcmake
+              emcmake cmake -G Ninja \
+                -DCMAKE_BUILD_TYPE=MinSizeRel \
+                -DNO_ISA_EXTENSIONS=ON \
+                -DDOWNLOAD_CAPSTONE=ON \
+                -DDOWNLOAD_GLFW=ON \
+                -DDOWNLOAD_FREETYPE=ON \
+                $cmakeFlags \
+                .
+
+              runHook postConfigure
+            '';
+
+            buildPhase = ''
+              runHook preBuild
+
+              # Build with emmake
+              emmake ninja
+
+              # Compress artifacts as done in CI
+              ${pkgs.zstd}/bin/zstd -18 -f tracy-profiler.js tracy-profiler.wasm
+              ${pkgs.gzip}/bin/gzip -9 -f -k tracy-profiler.js tracy-profiler.wasm
+
+              runHook postBuild
+            '';
+
+            installPhase = ''
+              runHook preInstall
+
+              mkdir -p $out/share/tracy-profiler-web
+
+              # Install all web artifacts
+              cp index.html $out/share/tracy-profiler-web/
+              cp favicon.svg $out/share/tracy-profiler-web/
+              cp tracy-profiler.data $out/share/tracy-profiler-web/
+              cp tracy-profiler.js.gz $out/share/tracy-profiler-web/
+              cp tracy-profiler.js.zst $out/share/tracy-profiler-web/
+              cp tracy-profiler.wasm.gz $out/share/tracy-profiler-web/
+              cp tracy-profiler.wasm.zst $out/share/tracy-profiler-web/
+
+              # Also copy httpd.py if it exists
+              if [ -f httpd.py ]; then
+                cp httpd.py $out/share/tracy-profiler-web/
+              fi
+
+              runHook postInstall
+            '';
+
+            meta = with pkgs.lib; {
+              description = "Tracy profiler WebAssembly build for browsers";
+              homepage = "https://github.com/wolfpld/tracy";
+              license = licenses.bsd3;
+              platforms = platforms.all;
             };
           };
 
