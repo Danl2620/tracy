@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(nix flake check:*)",
+      "Bash(git add:*)",
+      "Bash(xargs:*)",
+      "Bash(nix flake lock:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

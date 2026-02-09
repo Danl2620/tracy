@@ -1,0 +1,297 @@
+{
+  "nodes": {
+    "base64": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1704897958,
+        "narHash": "sha256-dIaNfQ/znpAdg0/vhVNTfoaG7c8eFrdDTI0QDHcghXU=",
+        "owner": "aklomp",
+        "repo": "base64",
+        "rev": "8bdda2d47caf8b066999c5bd01069e55bcd0d396",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aklomp",
+        "ref": "v0.5.2",
+        "repo": "base64",
+        "type": "github"
+      }
+    },
+    "capstone": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1754305988,
+        "narHash": "sha256-18PTj4hvBw8RTgzaFGeaDbBfkxmotxSoGtprIjcEuVg=",
+        "owner": "capstone-engine",
+        "repo": "capstone",
+        "rev": "fad9f80564501f083adc92db3ef37f999af28dd0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "capstone-engine",
+        "ref": "6.0.0-Alpha5",
+        "repo": "capstone",
+        "type": "github"
+      }
+    },
+    "curl": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1762326005,
+        "narHash": "sha256-fMiiX1vlLh3AqwARUgm+356pRTCu13Q3PDq1q9RDgQQ=",
+        "owner": "curl",
+        "repo": "curl",
+        "rev": "400fffa90f30c7a2dc762fa33009d24851bd2016",
+        "type": "github"
+      },
+      "original": {
+        "owner": "curl",
+        "ref": "curl-8_17_0",
+        "repo": "curl",
+        "type": "github"
+      }
+    },
+    "freetype": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1757589413,
+        "narHash": "sha256-y/1F+lewcP1yyJ99US/L6kXnOedIV+2srk0UwbaUOzg=",
+        "owner": "freetype",
+        "repo": "freetype",
+        "rev": "526ec5c47b9ebccc4754c85ac0c0cdf7c85a5e9b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "freetype",
+        "ref": "VER-2-14-1",
+        "repo": "freetype",
+        "type": "github"
+      }
+    },
+    "glfw": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1708688731,
+        "narHash": "sha256-FcnQPDeNHgov1Z07gjFze0VMz2diOrpbKZCsI96ngz0=",
+        "owner": "glfw",
+        "repo": "glfw",
+        "rev": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
+        "type": "github"
+      },
+      "original": {
+        "owner": "glfw",
+        "ref": "3.4",
+        "repo": "glfw",
+        "type": "github"
+      }
+    },
+    "imgui": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1763658062,
+        "narHash": "sha256-/jVT7+874LCeSF/pdNVTFoSOfRisSqxCJnt5/SGCXPQ=",
+        "owner": "ocornut",
+        "repo": "imgui",
+        "rev": "3912b3d9a9c1b3f17431aebafd86d2f40ee6e59c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ocornut",
+        "ref": "v1.92.5-docking",
+        "repo": "imgui",
+        "type": "github"
+      }
+    },
+    "md4c": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1706601696,
+        "narHash": "sha256-2/wi7nJugR8X2J9FjXJF1UDnbsozGoO7iR295/KSJng=",
+        "owner": "mity",
+        "repo": "md4c",
+        "rev": "729e6b8b320caa96328968ab27d7db2235e4fb47",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mity",
+        "ref": "release-0.5.2",
+        "repo": "md4c",
+        "type": "github"
+      }
+    },
+    "nativefiledialog-extended": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1722700633,
+        "narHash": "sha256-GwT42lMZAAKSJpUJE6MYOpSLKUD5o9nSe9lcsoeXgJY=",
+        "owner": "btzy",
+        "repo": "nativefiledialog-extended",
+        "rev": "86d5f2005fe1c00747348a12070fec493ea2407e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "btzy",
+        "ref": "v1.2.1",
+        "repo": "nativefiledialog-extended",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1770562336,
+        "narHash": "sha256-ub1gpAONMFsT/GU2hV6ZWJjur8rJ6kKxdm9IlCT0j84=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nlohmann-json": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1744360948,
+        "narHash": "sha256-cECvDOLxgX7Q9R3IE86Hj9JJUxraDQvhoyPDF03B2CY=",
+        "owner": "nlohmann",
+        "repo": "json",
+        "rev": "55f93686c01528224f448c19128836e7df245f72",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nlohmann",
+        "ref": "v3.12.0",
+        "repo": "json",
+        "type": "github"
+      }
+    },
+    "packageproject-cmake": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1700392592,
+        "narHash": "sha256-E7WZSYDlss5bidbiWL1uX41Oh6JxBRtfhYsFU19kzIw=",
+        "owner": "TheLartians",
+        "repo": "PackageProject.cmake",
+        "rev": "ac46aef9aaf69a59928a41529cbe30c920e84af4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "TheLartians",
+        "ref": "v1.11.1",
+        "repo": "PackageProject.cmake",
+        "type": "github"
+      }
+    },
+    "ppqsort": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1752679156,
+        "narHash": "sha256-HgM+p2QGd9C8A8l/VaEB+cLFDrY2HU6mmXyTNh7xd0A=",
+        "owner": "GabTux",
+        "repo": "PPQSort",
+        "rev": "21c5a20ca3daf572caaf0a8522db32e27e28fa1d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GabTux",
+        "ref": "v1.0.6",
+        "repo": "PPQSort",
+        "type": "github"
+      }
+    },
+    "pugixml": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1736532931,
+        "narHash": "sha256-t/57lg32KgKPc7qRGQtO/GOwHRqoj78lllSaE/A8Z9Q=",
+        "owner": "zeux",
+        "repo": "pugixml",
+        "rev": "ee86beb30e4973f5feffe3ce63bfa4fbadf72f38",
+        "type": "github"
+      },
+      "original": {
+        "owner": "zeux",
+        "ref": "v1.15",
+        "repo": "pugixml",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "base64": "base64",
+        "capstone": "capstone",
+        "curl": "curl",
+        "freetype": "freetype",
+        "glfw": "glfw",
+        "imgui": "imgui",
+        "md4c": "md4c",
+        "nativefiledialog-extended": "nativefiledialog-extended",
+        "nixpkgs": "nixpkgs",
+        "nlohmann-json": "nlohmann-json",
+        "packageproject-cmake": "packageproject-cmake",
+        "ppqsort": "ppqsort",
+        "pugixml": "pugixml",
+        "tidy-html5": "tidy-html5",
+        "usearch": "usearch",
+        "zstd-src": "zstd-src"
+      }
+    },
+    "tidy-html5": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1626479124,
+        "narHash": "sha256-vzVWQodwzi3GvC9IcSQniYBsbkJV20iZanF33A0Gpe0=",
+        "owner": "htacg",
+        "repo": "tidy-html5",
+        "rev": "1ca37471b48a3498f985509828cb3cf85ea129f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "htacg",
+        "ref": "5.8.0",
+        "repo": "tidy-html5",
+        "type": "github"
+      }
+    },
+    "usearch": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1763031265,
+        "narHash": "sha256-euLJQeJK1rf4PCS+DMFo+/bnOBQdpnM3FIsC9DtL+wY=",
+        "owner": "unum-cloud",
+        "repo": "usearch",
+        "rev": "13c3fd9ce8662da3e444b187941d7777b921312b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "unum-cloud",
+        "ref": "v2.21.3",
+        "repo": "usearch",
+        "type": "github"
+      }
+    },
+    "zstd-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1739923464,
+        "narHash": "sha256-tNFWIT9ydfozB8dWcmTMuZLCQmQudTFJIkSr0aG7S44=",
+        "owner": "facebook",
+        "repo": "zstd",
+        "rev": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+        "type": "github"
+      },
+      "original": {
+        "owner": "facebook",
+        "ref": "v1.5.7",
+        "repo": "zstd",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
