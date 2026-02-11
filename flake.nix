@@ -36,7 +36,7 @@
     };
 
     usearch = {
-      url = "github:unum-cloud/usearch/v2.21.3?submodules=1";
+      url = "github:unum-cloud/usearch/v2.22.0?submodules=1";
       flake = false;
     };
 
@@ -238,6 +238,7 @@
               "-DDOWNLOAD_CAPSTONE=ON"
               "-DDOWNLOAD_GLFW=ON"
               "-DDOWNLOAD_FREETYPE=ON"
+              "-DUSEARCH_USE_FP16LIB=OFF"
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
               "-DLEGACY=OFF"  # Use Wayland by default on Linux
               "-DGTK_FILESELECTOR=OFF"  # Use xdg-portal

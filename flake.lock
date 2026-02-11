@@ -260,16 +260,16 @@
     "usearch": {
       "flake": false,
       "locked": {
-        "lastModified": 1763031265,
-        "narHash": "sha256-euLJQeJK1rf4PCS+DMFo+/bnOBQdpnM3FIsC9DtL+wY=",
+        "lastModified": 1766344569,
+        "narHash": "sha256-rwr86lr2TF/I06ZBK0WVcrZ9ili+bHcmVzrapDG64S4=",
         "owner": "unum-cloud",
         "repo": "usearch",
-        "rev": "13c3fd9ce8662da3e444b187941d7777b921312b",
+        "rev": "5fd2d3a7d340cc93b1de2b47d489d27e9dfe4958",
         "type": "github"
       },
       "original": {
         "owner": "unum-cloud",
-        "ref": "v2.21.3",
+        "ref": "v2.22.0",
         "repo": "usearch",
         "type": "github"
       }
