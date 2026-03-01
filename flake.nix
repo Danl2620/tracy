@@ -194,6 +194,8 @@
               wayland-protocols
               libxkbcommon
               libGL
+              libglvnd
+              mesa
 
               # Build dependencies from tracy-0.13.nix
               curl
@@ -234,14 +236,12 @@
             '';
 
             cmakeFlags = [
-              "-DNO_ISA_EXTENSIONS=ON"
-              "-DDOWNLOAD_CAPSTONE=ON"
-              "-DDOWNLOAD_GLFW=ON"
-              "-DDOWNLOAD_FREETYPE=ON"
+              "-DCMAKE_BUILD_TYPE=Release"
+              # Disable FP16 library requirement for usearch (not available in nix)
               "-DUSEARCH_USE_FP16LIB=OFF"
-            ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
-              "-DLEGACY=OFF"  # Use Wayland by default on Linux
-              "-DGTK_FILESELECTOR=OFF"  # Use xdg-portal
+              # Disable march=native for reproducible builds
+              "-DNO_ISA_EXTENSIONS=ON"
+              # Defaults to Wayland on Linux like the justfile (no LEGACY flag)
             ];
 
             postInstall = ''

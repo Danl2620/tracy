@@ -9,7 +9,12 @@
       "Bash(tar:*)",
       "Bash(/tmp/just:*)",
       "Bash(nix search:*)",
-      "Bash(nix:*)"
+      "Bash(nix:*)",
+      "Bash(./result/bin/tracy-profiler:*)",
+      "Bash(ldd:*)",
+      "Bash(echo:*)",
+      "Bash(timeout 3 ./result/bin/tracy-profiler:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []
