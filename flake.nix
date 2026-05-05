@@ -51,6 +51,12 @@
           ninja
           nativefiledialog-extended
 
+          # WASM build dependencies
+          emscripten
+          nodejs
+          python3
+          zstd
+
           # Development time dependencies
           catch2_3
         ];
@@ -82,6 +88,7 @@
           icon = "f121";
         in ''
           export PS1="$(echo -e '\u${icon}') {\[$(tput sgr0)\]\[\033[38;5;228m\]\w\[$(tput sgr0)\]\[\033[38;5;15m\]} (${name}) \\$ \[$(tput sgr0)\]"
+          export EMSDK="${pkgs.emscripten}"
         '';
       };
 
@@ -98,6 +105,11 @@
         client = pkgs.callPackage ./extra/client-package.nix {
           src = pkgs.lib.cleanSource ./.;
         };
+
+        # WASM profiler for web browsers
+        wasm = (pkgs.callPackage ./extra/wasm-package.nix {
+          src = pkgs.lib.cleanSource ./.;
+        }).tracy-wasm;
       };
       inherit formatter;
     });

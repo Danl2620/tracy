@@ -1,17 +1,16 @@
 {
   fetchFromGitHub,
   fetchFromGitLab,
-  md4c,
-  pugixml,
-  curl,
+  md4c ? null,
+  pugixml ? null,
+  curl ? null,
 }: {
-  version = "0.13.1";
-  srcHash = "sha256-D4aQ5kSfWH9qEUaithR0W/E5pN5on0n9YoBHeMggMSE=";
-  extraBuildInputs = [
-    md4c
-    pugixml
-    curl
-  ];
+  version = "0.13.3";
+  srcHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Not used for local source builds
+  extraBuildInputs =
+    if md4c != null && pugixml != null && curl != null
+    then [md4c pugixml curl]
+    else [];
   cpmSrcs = [
     (fetchFromGitHub {
       name = "zstd";
@@ -24,15 +23,15 @@
       name = "ImGui";
       owner = "ocornut";
       repo = "imgui";
-      rev = "v1.92.5-docking";
-      hash = "sha256-/jVT7+874LCeSF/pdNVTFoSOfRisSqxCJnt5/SGCXPQ=";
+      rev = "v1.92.7-docking";
+      hash = "sha256-RkWDGGwBDop9AfMLZJgUi5WFqkuMSqDn7Pa/DZQUJTA=";
     })
     (fetchFromGitHub {
       name = "nfd";
       owner = "btzy";
       repo = "nativefiledialog-extended";
-      rev = "v1.2.1";
-      hash = "sha256-GwT42lMZAAKSJpUJE6MYOpSLKUD5o9nSe9lcsoeXgJY=";
+      rev = "v1.3.0";
+      hash = "sha256-JrwJP7zt/4oW4OQHCEM23k+zm6j1AVglGJowwkWc29k=";
     })
     (fetchFromGitHub {
       name = "PPQSort";
@@ -53,8 +52,8 @@
       name = "capstone";
       owner = "capstone-engine";
       repo = "capstone";
-      rev = "6.0.0-Alpha5";
-      hash = "sha256-18PTj4hvBw8RTgzaFGeaDbBfkxmotxSoGtprIjcEuVg=";
+      rev = "6.0.0-Alpha7";
+      hash = "sha256-cLEMlfZdzIa52imoDSrDKSnMH+bXauh2SwMvG4VWshE=";
     })
     (fetchFromGitLab {
       name = "wayland-protocols";
@@ -89,9 +88,23 @@
       name = "usearch";
       owner = "unum-cloud";
       repo = "usearch";
-      rev = "v2.21.3";
+      rev = "v2.23.0";
       fetchSubmodules = true;
-      hash = "sha256-7IylunAkVNceKSXzCkcpp/kAsI3XoqniHe10u3teUVA=";
+      hash = "sha256-r42JShUnYxvQ7Of1hKtC0TZnMV73xLXzUjV394XyqD4=";
+    })
+    (fetchFromGitHub {
+      name = "freetype";
+      owner = "freetype";
+      repo = "freetype";
+      rev = "VER-2-14-3";
+      hash = "sha256-qmgJK9D60Ol5prUpsLzS+zY8WTPV2bfCoHX3lajAJ4Y=";
+    })
+    (fetchFromGitHub {
+      name = "md4c";
+      owner = "mity";
+      repo = "md4c";
+      rev = "release-0.5.2";
+      hash = "sha256-2/wi7nJugR8X2J9FjXJF1UDnbsozGoO7iR295/KSJng=";
     })
   ];
 }

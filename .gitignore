@@ -40,3 +40,5 @@ examples/ToyPathTracer/Windows/x64
 build.log
 result
 .local
+bin
+result-wasm
