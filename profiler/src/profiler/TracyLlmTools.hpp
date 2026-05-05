@@ -16,6 +16,7 @@ class EmbedData;
 namespace tracy
 {
 
+struct LlmSkill;
 class TracyLlmApi;
 class TracyManualData;
 class Worker;
@@ -23,12 +24,6 @@ class Worker;
 class TracyLlmTools
 {
 public:
-    struct ToolReply
-    {
-        std::string reply;
-        std::string image;
-    };
-
     struct EmbeddingState
     {
         std::string model;
@@ -37,11 +32,13 @@ public:
         float progress = 0;
     };
 
-    TracyLlmTools( Worker& worker, const TracyManualData& manual );
+    TracyLlmTools( Worker& worker, const TracyManualData& manual, const std::vector<LlmSkill>& skills );
     ~TracyLlmTools();
 
-    ToolReply HandleToolCalls( const std::string& tool, const nlohmann::json& json, TracyLlmApi& api, int contextSize, bool hasEmbeddingsModel );
+    std::string HandleToolCalls( const std::string& tool, const nlohmann::json& json, TracyLlmApi& api, int contextSize, bool hasEmbeddingsModel );
     std::string GetCurrentTime() const;
+
+    static int CalcCtxBasedLimit( int ctxSize );
 
     [[nodiscard]] EmbeddingState GetManualEmbeddingsState() const;
     void SelectManualEmbeddings( const std::string& model );
@@ -54,14 +51,19 @@ private:
     [[nodiscard]] int CalcMaxSize() const;
     [[nodiscard]] std::string TrimString( std::string&& str ) const;
 
-    std::string FetchWebPage( const std::string& url, bool cache = true );
-    ToolReply SearchWikipedia( std::string query, const std::string& lang );
+    std::string FetchHttp( const std::string& url, const std::vector<const char*>& headers = {}, bool cache = true );
+    std::string SearchWikipedia( std::string query, const std::string& lang );
     std::string GetWikipedia( std::string page, const std::string& lang );
     std::string GetDictionary( std::string word, const std::string& lang );
     std::string SearchWeb( std::string query );
+    std::string SearchWebGoogle( std::string query );
+    std::string SearchWebBrave( std::string query );
+    std::string SearchWebDuckDuckGo( std::string query );
     std::string GetWebpage( const std::string& url );
     std::string SearchManual( const std::string& query, TracyLlmApi& api, bool hasEmbeddingsModel );
-    std::string SourceFile( const std::string& file, uint32_t line ) const;
+    std::string SourceFile( const std::string& file, uint32_t line, uint32_t context, uint32_t contextBack ) const;
+    std::string SourceSearch( std::string query, bool caseInsensitive, const std::string& path ) const;
+    std::string GetSkill( const std::string& name ) const;
 
     void ManualEmbeddingsWorker( TracyLlmApi& api );
 
@@ -79,6 +81,7 @@ private:
 
     Worker& m_worker;
     const TracyManualData& m_manual;
+    const std::vector<LlmSkill>& m_skills;
 };
 
 }

@@ -10,6 +10,8 @@
 #    define TRACY_SAMPLING_HZ 8000
 #  elif defined __linux__
 #    define TRACY_SAMPLING_HZ 10000
+#  elif defined __APPLE__
+#    define TRACY_SAMPLING_HZ 1000
 #  endif
 #endif
 
@@ -34,9 +36,9 @@ static int GetSamplingFrequency()
 #endif
 }
 
-static int GetSamplingPeriod()
+static int SamplingFrequencyToPeriodNs( int samplingHz )
 {
-    return 1000000000 / GetSamplingFrequency();
+    return 1000000000 / samplingHz;
 }
 
 }
@@ -59,6 +61,7 @@ static int GetSamplingPeriod()
 #    include "../common/TracySystem.hpp"
 #    include "TracyProfiler.hpp"
 #    include "TracyThread.hpp"
+#    include "windows/TracyETW_compat.h"
 #    include "windows/TracyETW.cpp"
 
 namespace tracy
@@ -171,11 +174,6 @@ void WINAPI EventRecordCallback( PEVENT_RECORD record )
     }
 }
 
-static int GetSamplingInterval()
-{
-    return GetSamplingPeriod() / 100;
-}
-
 static etw::Session session_kernel = {};
 static etw::Session session_vsync = {};
 static PROCESSTRACE_HANDLE consumer_kernel = INVALID_PROCESSTRACE_HANDLE;
@@ -188,54 +186,42 @@ bool SysTraceStart( int64_t& samplingPeriod )
 
     s_pid = GetCurrentProcessId();
 
-    if ( !etw::CheckAdminPrivilege() )
+    if( !etw::CheckAdminPrivilege() )
         return false;
 
-    ULONGLONG EnableFlags = 0;
-#ifndef TRACY_NO_CONTEXT_SWITCH
-    EnableFlags |= EVENT_TRACE_FLAG_CSWITCH;
-    EnableFlags |= EVENT_TRACE_FLAG_DISPATCHER;
-    EnableFlags |= EVENT_TRACE_FLAG_THREAD;
-#endif
-#ifndef TRACY_NO_SAMPLING
-    DWORD access = etw::ElevatePrivilege( SE_SYSTEM_PROFILE_NAME );
-    if( access != ERROR_SUCCESS )
-        return access;
-    EnableFlags |= etw::IsOS64Bit() ? EVENT_TRACE_FLAG_PROFILE : 0;
-#endif
-
-    session_kernel = etw::StartSingletonKernelLoggerSession( EnableFlags );
-    if ( session_kernel.handle == 0 )
+    session_kernel = etw::StartSingletonKernelLoggerSession( 0 );
+    if( session_kernel.handle == 0 )
         return false;
 
 #ifndef TRACY_NO_CONTEXT_SWITCH
-    if ( etw::EnableStackWalk( session_kernel, etw::ThreadGuid, etw::CSwitch::Opcode ) != ERROR_SUCCESS )
+    if( etw::EnableProcessAndThreadMonitoring( session_kernel ) != ERROR_SUCCESS )
+        return etw::StopSession( session_kernel ), false;
+    if( etw::EnableContextSwitchMonitoring( session_kernel ) != ERROR_SUCCESS )
         return etw::StopSession( session_kernel ), false;
 #endif
 
+
 #ifndef TRACY_NO_SAMPLING
-    if ( etw::EnableStackWalk( session_kernel, etw::PerfInfoGuid, etw::SampledProfile::Opcode ) != ERROR_SUCCESS )
+    samplingPeriod = SamplingFrequencyToPeriodNs( GetSamplingFrequency() );
+    const int microseconds = samplingPeriod / 1000;
+    if( etw::EnableCPUProfiling( session_kernel, microseconds ) != ERROR_SUCCESS )
         return etw::StopSession( session_kernel ), false;
-    int microseconds = GetSamplingInterval() / 10;
-    if ( etw::SetCPUProfilingInterval( microseconds ) != ERROR_SUCCESS )
-        return etw::StopSession( session_kernel ), false;
-    samplingPeriod = GetSamplingPeriod();
 #endif
 
     consumer_kernel = etw::SetupEventConsumer( session_kernel, EventRecordCallback );
-    if ( consumer_kernel == INVALID_PROCESSTRACE_HANDLE )
+    if( consumer_kernel == INVALID_PROCESSTRACE_HANDLE )
         return etw::StopSession( session_kernel ), false;
 
 #ifndef TRACY_NO_VSYNC_CAPTURE
     session_vsync = etw::StartUserSession( "TracyVsync" );
-    if ( session_vsync.handle != 0 )
+    if( session_vsync.handle != 0 )
     {
-        if ( etw::EnableVSyncMonitoring( session_vsync ) != ERROR_SUCCESS )
+        if( etw::EnableVSyncMonitoring( session_vsync ) != ERROR_SUCCESS )
             etw::StopSession( session_vsync );
         else
         {
             consumer_vsync = etw::SetupEventConsumer( session_vsync, EventRecordCallback );
-            if ( consumer_vsync != INVALID_PROCESSTRACE_HANDLE )
+            if( consumer_vsync != INVALID_PROCESSTRACE_HANDLE )
             {
                 s_threadVsync = (Thread*)tracy_malloc( sizeof( Thread ) );
                 new(s_threadVsync) Thread( [] (void*) {
@@ -389,6 +375,7 @@ void SysTraceGetExternalName( uint64_t thread, const char*& threadName, const ch
 #    include <sys/types.h>
 #    include <sys/stat.h>
 #    include <sys/wait.h>
+#    include <dirent.h>
 #    include <fcntl.h>
 #    include <inttypes.h>
 #    include <limits>
@@ -424,6 +411,52 @@ static int s_ctxBufferIdx = 0;
 
 static RingBuffer* s_ring = nullptr;
 
+extern uint32_t ___tracy_magic_pid_override;
+
+// (pid, cpu) pair for a per-task perf event open. In self-profiling mode we
+// iterate one entry per CPU with pid = our tgid. In monitor mode we iterate
+// one entry per existing thread of the target, with cpu = -1, so inherit=1
+// can cover all descendants without multiplying ring buffers by CPU count.
+struct PerfIterTarget
+{
+    pid_t pid;
+    int cpu;
+};
+
+// Read /proc/<pid>/task/ and return the list of tids. Caller owns the buffer
+// (tracy_free). Returns 0 and sets *out = nullptr on failure.
+static int EnumerateTaskTids( pid_t pid, uint32_t** out )
+{
+    char path[64];
+    snprintf( path, sizeof( path ), "/proc/%d/task", (int)pid );
+    DIR* dir = opendir( path );
+    if( !dir )
+    {
+        *out = nullptr;
+        return 0;
+    }
+    size_t capacity = 32;
+    uint32_t* tids = (uint32_t*)tracy_malloc( sizeof( uint32_t ) * capacity );
+    size_t count = 0;
+    struct dirent* entry;
+    while( ( entry = readdir( dir ) ) != nullptr )
+    {
+        if( entry->d_name[0] == '.' ) continue;
+        char* endp;
+        unsigned long tid = strtoul( entry->d_name, &endp, 10 );
+        if( *endp != '\0' || tid == 0 ) continue;
+        if( count >= capacity )
+        {
+            capacity *= 2;
+            tids = (uint32_t*)tracy_realloc( tids, sizeof( uint32_t ) * capacity );
+        }
+        tids[count++] = (uint32_t)tid;
+    }
+    closedir( dir );
+    *out = tids;
+    return (int)count;
+}
+
 static const int ThreadHashSize = 4 * 1024;
 static uint32_t s_threadHash[ThreadHashSize] = {};
 
@@ -435,7 +468,14 @@ static bool CurrentProcOwnsThread( uint32_t tid )
     if( hv == -tid ) return false;
 
     char path[256];
-    sprintf( path, "/proc/self/task/%d", tid );
+    if( ___tracy_magic_pid_override != 0 )
+    {
+        sprintf( path, "/proc/%d/task/%d", (int)___tracy_magic_pid_override, tid );
+    }
+    else
+    {
+        sprintf( path, "/proc/self/task/%d", tid );
+    }
     struct stat st;
     if( stat( path, &st ) == 0 )
     {
@@ -563,13 +603,26 @@ static char* GetTraceFsPath()
     char* ret = nullptr;
     while( auto ent = getmntent( f ) )
     {
-        if( strcmp( ent->mnt_fsname, "tracefs" ) == 0 )
+        if( strcmp( ent->mnt_type, "tracefs" ) == 0 )
         {
             auto len = strlen( ent->mnt_dir );
-            ret = (char*)tracy_malloc( len + 1 );
+            // ret may be != nullptr if we already saw a debugfs entry
+            ret = (char*)tracy_realloc( ret, len + 1 );
             memcpy( ret, ent->mnt_dir, len );
             ret[len] = '\0';
             break;
+        }
+        else if( !ret && strcmp( ent->mnt_type, "debugfs" ) == 0 )
+        {
+            const char* tracingDirName = "tracing";
+            const size_t tracingDirNameLen = strlen( tracingDirName );
+            auto debugFsPathLen = strlen( ent->mnt_dir );
+            ret = (char*)tracy_malloc( debugFsPathLen + 1 + tracingDirNameLen + 1 );
+            memcpy( ret, ent->mnt_dir, debugFsPathLen );
+            ret[debugFsPathLen] = '/';
+            memcpy( ret + debugFsPathLen + 1, tracingDirName, tracingDirNameLen );
+            ret[debugFsPathLen + 1 + tracingDirNameLen] = '\0';
+            // Don't break to allow for tracefs to be found later as it is the preferred path
         }
     }
     endmntent( f );
@@ -583,15 +636,21 @@ bool SysTraceStart( int64_t& samplingPeriod )
 #endif
 
     const auto paranoidLevelStr = ReadFile( "/proc/sys/kernel/perf_event_paranoid" );
-    if( !paranoidLevelStr ) return false;
-#ifdef TRACY_VERBOSE
-    int paranoidLevel = 2;
-    paranoidLevel = atoi( paranoidLevelStr );
+    if( !paranoidLevelStr )
+    {
+        TracyDebug( "Failed to read perf_event_paranoid, cannot setup system tracing." );
+        return false;
+    }
+
+    const int paranoidLevel = atoi( paranoidLevelStr );
     TracyDebug( "perf_event_paranoid: %i", paranoidLevel );
-#endif
 
     auto traceFsPath = GetTraceFsPath();
-    if( !traceFsPath ) return false;
+    if( !traceFsPath )
+    {
+        TracyDebug( "Failed to get tracefs path, cannot setup system tracing." );
+        return false;
+    }
     TracyDebug( "tracefs path: %s", traceFsPath );
 
     int switchId = -1, wakingId = -1, vsyncId = -1;
@@ -607,6 +666,15 @@ bool SysTraceStart( int64_t& samplingPeriod )
     TracyDebug( "sched_switch id: %i", switchId );
     TracyDebug( "sched_waking id: %i", wakingId );
     TracyDebug( "drm_vblank_event id: %i", vsyncId );
+
+    bool useMonotonicClockRaw = !HardwareSupportsInvariantTSC();
+#if !defined TRACY_HW_TIMER || !defined TRACY_HAS_RDTSC
+    useMonotonicClockRaw = true;
+#endif
+    if( useMonotonicClockRaw )
+    {
+        TracyDebug( "Using CLOCK_MONOTONIC_RAW for Linux perf events." );
+    }
 
 #ifdef TRACY_NO_SAMPLING
     const bool noSoftwareSampling = true;
@@ -650,16 +718,58 @@ bool SysTraceStart( int64_t& samplingPeriod )
     const bool noVsync = noVsyncEnv && noVsyncEnv[0] == '1';
 #endif
 
-    samplingPeriod = GetSamplingPeriod();
-    uint32_t currentPid = (uint32_t)getpid();
+    int samplingFrequency = GetSamplingFrequency();
+    if( samplingFrequency > 0 )
+    {
+        const auto maxSampleRateStr = ReadFile( "/proc/sys/kernel/perf_event_max_sample_rate" );
+        if( maxSampleRateStr )
+        {
+            const int sysMax = atoi( maxSampleRateStr );
+            if( sysMax > 0 && sysMax < samplingFrequency )
+            {
+                TracyDebug( "Requested sampling frequency %d Hz is higher than system maximum of %d Hz, reducing to system maximum.", samplingFrequency, sysMax );
+                samplingFrequency = sysMax;
+            }
+        }
+    }
+    samplingPeriod = SamplingFrequencyToPeriodNs( samplingFrequency );
+    uint32_t currentPid = ___tracy_magic_pid_override != 0 ? ___tracy_magic_pid_override : (uint32_t)getpid();
 
     s_numCpus = (int)std::thread::hardware_concurrency();
 
-    const auto maxNumBuffers = s_numCpus * (
+    // Build the per-task iteration list. In monitor mode this is all existing
+    // threads of the target (one event per thread, any CPU); in self-profiling
+    // it is per-CPU bound to our own tgid.
+    PerfIterTarget* iter = nullptr;
+    int numIter = 0;
+    if( ___tracy_magic_pid_override != 0 )
+    {
+        uint32_t* tids = nullptr;
+        const int numTids = EnumerateTaskTids( (pid_t)currentPid, &tids );
+        if( numTids == 0 )
+        {
+            TracyDebug( "Failed to enumerate threads of pid %u; target may have exited.", currentPid );
+            return false;
+        }
+        iter = (PerfIterTarget*)tracy_malloc( sizeof( PerfIterTarget ) * numTids );
+        for( int i=0; i<numTids; i++ ) iter[i] = { (pid_t)tids[i], -1 };
+        numIter = numTids;
+        tracy_free( tids );
+        TracyDebug( "Monitor mode: tracing %i existing threads of pid %u", numIter, currentPid );
+    }
+    else
+    {
+        iter = (PerfIterTarget*)tracy_malloc( sizeof( PerfIterTarget ) * s_numCpus );
+        for( int i=0; i<s_numCpus; i++ ) iter[i] = { (pid_t)currentPid, i };
+        numIter = s_numCpus;
+    }
+
+    const auto maxNumBuffers = numIter * (
         1 +     // software sampling
         2 +     // CPU cycles + instructions retired
         2 +     // cache reference + miss
-        2 +     // branch retired + miss
+        2       // branch retired + miss
+    ) + s_numCpus * (
         2 +     // context switches + waking ups
         1       // vsync
     );
@@ -671,7 +781,7 @@ bool SysTraceStart( int64_t& samplingPeriod )
     pe.type = PERF_TYPE_SOFTWARE;
     pe.size = sizeof( perf_event_attr );
     pe.config = PERF_COUNT_SW_CPU_CLOCK;
-    pe.sample_freq = GetSamplingFrequency();
+    pe.sample_freq = samplingFrequency;
     pe.sample_type = PERF_SAMPLE_TID | PERF_SAMPLE_TIME | PERF_SAMPLE_CALLCHAIN;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION( 4, 8, 0 )
     pe.sample_max_stack = 127;
@@ -679,23 +789,24 @@ bool SysTraceStart( int64_t& samplingPeriod )
     pe.disabled = 1;
     pe.freq = 1;
     pe.inherit = 1;
-#if !defined TRACY_HW_TIMER || !( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
-    pe.use_clockid = 1;
-    pe.clockid = CLOCK_MONOTONIC_RAW;
-#endif
+    if( useMonotonicClockRaw )
+    {
+        pe.use_clockid = 1;
+        pe.clockid = CLOCK_MONOTONIC_RAW;
+    }
 
     if( !noSoftwareSampling )
     {
         TracyDebug( "Setup software sampling" );
         ProbePreciseIp( pe, currentPid );
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd == -1 )
             {
                 pe.exclude_kernel = 1;
                 ProbePreciseIp( pe, currentPid );
-                fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+                fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
                 if( fd == -1 )
                 {
                     TracyDebug( "  Failed to setup!");
@@ -707,7 +818,7 @@ bool SysTraceStart( int64_t& samplingPeriod )
             if( s_ring[s_numBuffers].IsValid() )
             {
                 s_numBuffers++;
-                TracyDebug( "  Core %i ok", i );
+                TracyDebug( "  Target %i ok", i );
             }
         }
     }
@@ -724,40 +835,41 @@ bool SysTraceStart( int64_t& samplingPeriod )
     pe.exclude_hv = 1;
     pe.freq = 1;
     pe.inherit = 1;
-#if !defined TRACY_HW_TIMER || !( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
-    pe.use_clockid = 1;
-    pe.clockid = CLOCK_MONOTONIC_RAW;
-#endif
+    if( useMonotonicClockRaw )
+    {
+        pe.use_clockid = 1;
+        pe.clockid = CLOCK_MONOTONIC_RAW;
+    }
 
     if( !noRetirement )
     {
         TracyDebug( "Setup sampling cycles + retirement" );
         ProbePreciseIp( pe, PERF_COUNT_HW_CPU_CYCLES, PERF_COUNT_HW_INSTRUCTIONS, currentPid );
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventCpuCycles );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
 
         pe.config = PERF_COUNT_HW_INSTRUCTIONS;
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventInstructionsRetired );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
@@ -773,31 +885,31 @@ bool SysTraceStart( int64_t& samplingPeriod )
             pe.precise_ip = 0;
             TracyDebug( "  CPU is GenuineIntel, forcing precise_ip down to 0" );
         }
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventCacheReference );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
 
         pe.config = PERF_COUNT_HW_CACHE_MISSES;
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventCacheMiss );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
@@ -808,31 +920,31 @@ bool SysTraceStart( int64_t& samplingPeriod )
     {
         TracyDebug( "Setup sampling CPU branch retirements + misses" );
         ProbePreciseIp( pe, PERF_COUNT_HW_BRANCH_INSTRUCTIONS, PERF_COUNT_HW_BRANCH_MISSES, currentPid );
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventBranchRetired );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
 
         pe.config = PERF_COUNT_HW_BRANCH_MISSES;
-        for( int i=0; i<s_numCpus; i++ )
+        for( int i=0; i<numIter; i++ )
         {
-            const int fd = perf_event_open( &pe, currentPid, i, -1, PERF_FLAG_FD_CLOEXEC );
+            const int fd = perf_event_open( &pe, iter[i].pid, iter[i].cpu, -1, PERF_FLAG_FD_CLOEXEC );
             if( fd != -1 )
             {
                 new( s_ring+s_numBuffers ) RingBuffer( 64*1024, fd, EventBranchMiss );
                 if( s_ring[s_numBuffers].IsValid() )
                 {
                     s_numBuffers++;
-                    TracyDebug( "  Core %i ok", i );
+                    TracyDebug( "  Target %i ok", i );
                 }
             }
         }
@@ -850,10 +962,11 @@ bool SysTraceStart( int64_t& samplingPeriod )
         pe.sample_type = PERF_SAMPLE_TIME | PERF_SAMPLE_RAW;
         pe.disabled = 1;
         pe.config = vsyncId;
-#if !defined TRACY_HW_TIMER || !( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
-        pe.use_clockid = 1;
-        pe.clockid = CLOCK_MONOTONIC_RAW;
-#endif
+        if( useMonotonicClockRaw )
+        {
+            pe.use_clockid = 1;
+            pe.clockid = CLOCK_MONOTONIC_RAW;
+        }
 
         TracyDebug( "Setup vsync capture" );
         for( int i=0; i<s_numCpus; i++ )
@@ -885,10 +998,11 @@ bool SysTraceStart( int64_t& samplingPeriod )
         pe.disabled = 1;
         pe.inherit = 1;
         pe.config = switchId;
-#if !defined TRACY_HW_TIMER || !( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
-        pe.use_clockid = 1;
-        pe.clockid = CLOCK_MONOTONIC_RAW;
-#endif
+        if( useMonotonicClockRaw )
+        {
+            pe.use_clockid = 1;
+            pe.clockid = CLOCK_MONOTONIC_RAW;
+        }
 
         TracyDebug( "Setup context switch capture" );
         for( int i=0; i<s_numCpus; i++ )
@@ -918,10 +1032,11 @@ bool SysTraceStart( int64_t& samplingPeriod )
             pe.inherit = 1;
             pe.config = wakingId;
             pe.read_format = 0;
-#if !defined TRACY_HW_TIMER || !( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
-            pe.use_clockid = 1;
-            pe.clockid = CLOCK_MONOTONIC_RAW;
-#endif
+            if( useMonotonicClockRaw )
+            {
+                pe.use_clockid = 1;
+                pe.clockid = CLOCK_MONOTONIC_RAW;
+            }
 
             TracyDebug( "Setup waking up capture" );
             for( int i=0; i<s_numCpus; i++ )
@@ -941,6 +1056,8 @@ bool SysTraceStart( int64_t& samplingPeriod )
     }
 
     TracyDebug( "Ringbuffers in use: %i", s_numBuffers );
+
+    tracy_free( iter );
 
     traceActive.store( true, std::memory_order_relaxed );
     return true;
@@ -1067,7 +1184,7 @@ void SysTraceWorker( void* ptr )
 
                         if( cnt > 0 )
                         {
-#if defined TRACY_HW_TIMER && ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+#if defined TRACY_HW_TIMER && defined TRACY_HAS_RDTSC
                             t0 = ring.ConvertTimeToTsc( t0 );
 #endif
                             auto trace = GetCallstackBlock( cnt, ring, offset );
@@ -1101,7 +1218,7 @@ void SysTraceWorker( void* ptr )
                         offset += sizeof( uint64_t );
                         ring.Read( &t0, offset, sizeof( uint64_t ) );
 
-#if defined TRACY_HW_TIMER && ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+#if defined TRACY_HW_TIMER && defined TRACY_HAS_RDTSC
                         t0 = ring.ConvertTimeToTsc( t0 );
 #endif
                         QueueType type;
@@ -1221,7 +1338,7 @@ void SysTraceWorker( void* ptr )
                         perf_event_header hdr;
                         ring.Read( &hdr, offset, sizeof( perf_event_header ) );
 
-#if defined TRACY_HW_TIMER && ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+#if defined TRACY_HW_TIMER && defined TRACY_HAS_RDTSC
                         t0 = ring.ConvertTimeToTsc( t0 );
 #endif
 
@@ -1463,6 +1580,10 @@ void SysTraceGetExternalName( uint64_t thread, const char*& threadName, const ch
 }
 
 }
+
+#  elif defined __APPLE__
+
+#    include "apple/TracyMach.cpp"
 
 #  endif
 

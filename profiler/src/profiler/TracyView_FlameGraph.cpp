@@ -837,9 +837,27 @@ void View::DrawFlameGraph()
             m_flameGraphInvariant.Reset();
         }
 
+        const auto& style = ImGui::GetStyle();
+        float probe = 0;
+        for( auto& t : td )
+        {
+            float w = ImGui::GetFrameHeight() * 2 + ImGui::CalcTextSize( m_worker.GetThreadName( t->id ) ).x + style.ItemSpacing.x * 2;
+            if( t->isFiber ) w += style.ItemSpacing.x + ImGui::CalcTextSize( "Fiber" ).x;
+            probe = std::max( probe, w );
+        }
+        const auto MinWidth = std::max( 150 * GetScale(), probe );
+        const int cols = std::max( 1, int( ImGui::GetContentRegionAvail().x / MinWidth ) );
+
+        const auto rows = ( tsz + cols - 1 ) / cols;
+        const auto rowsVisible = std::min<float>( rows, 7.5f );
+        const auto rowsHeight = ImGui::GetTextLineHeightWithSpacing() * rowsVisible;
+        ImGui::BeginChild( "###flamegraphthreadrows", ImVec2( -1, rowsHeight ) );
+
         int idx = 0;
+        ImGui::BeginTable( "##flamegraphthreadcols", cols, ImGuiTableFlags_NoSavedSettings );
         for( const auto& t : td )
         {
+            ImGui::TableNextColumn();
             ImGui::PushID( idx++ );
             const auto threadColor = GetThreadColor( t->id, 0 );
             SmallColorBox( threadColor );
@@ -852,6 +870,8 @@ void View::DrawFlameGraph()
                 TextColoredUnformatted( ImVec4( 0.2f, 0.6f, 0.2f, 1.f ), "Fiber" );
             }
         }
+        ImGui::EndTable();
+        ImGui::EndChild();
         ImGui::TreePop();
     }
 

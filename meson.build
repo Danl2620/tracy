@@ -93,6 +93,10 @@ if get_option('timer_fallback')
   tracy_common_args += ['-DTRACY_TIMER_FALLBACK']
 endif
 
+if get_option('disallow_hw_timer')
+  tracy_common_args += ['-DTRACY_DISALLOW_HW_TIMER']
+endif
+
 if get_option('no_crash_handler')
   tracy_common_args += ['-DTRACY_NO_CRASH_HANDLER']
 endif
@@ -134,7 +138,7 @@ if tracy_shared_libs
 endif
 
 if host_machine.system() == 'windows'
-  tracy_compile_args += ['-DWINVER=0x0601', '-D_WIN32_WINNT=0x0601']
+  tracy_compile_args += ['-DWINVER=0x0A00', '-D_WIN32_WINNT=0x0A00']
 endif
 
 includes = [
@@ -161,6 +165,7 @@ client_includes = [
     'public/client/TracyFastVector.hpp',
     'public/client/TracyKCore.hpp',
     'public/client/TracyLock.hpp',
+    'public/client/TracyMangle.hpp',
     'public/client/TracyProfiler.hpp',
     'public/client/TracyRingBuffer.hpp',
     'public/client/TracyScoped.hpp',
@@ -185,6 +190,7 @@ common_includes = [
     'public/common/TracySocket.hpp',
     'public/common/TracyStackFrames.hpp',
     'public/common/TracySystem.hpp',
+    'public/common/TracyTaggedUserlandAddress.hpp',
     'public/common/TracyWinFamily.hpp',
     'public/common/TracyYield.hpp'
 ]

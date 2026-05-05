@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <atomic>
+#include <condition_variable>
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
@@ -11,6 +12,7 @@
 #include "tracy_SPSCQueue.h"
 #include "TracyCallstack.hpp"
 #include "TracyKCore.hpp"
+#include "TracyMangle.hpp"
 #include "TracySysPower.hpp"
 #include "TracySysTime.hpp"
 #include "TracyFastVector.hpp"
@@ -28,8 +30,20 @@
 #  include <mach/mach_time.h>
 #endif
 
-#if ( (defined _WIN32 && !(defined _M_ARM64 || defined _M_ARM)) || ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 ) || ( defined TARGET_OS_IOS && TARGET_OS_IOS == 1 ) || ( defined __APPLE__  && defined __MACH__ && TARGET_CPU_ARM64 ) )
-#  define TRACY_HW_TIMER
+#if ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+#  define TRACY_HAS_RDTSC
+#elif defined _WIN32 && defined _M_ARM64
+#  define TRACY_HAS_CNTVCT
+#elif defined __APPLE__ && defined __MACH__ && TARGET_CPU_ARM64 // For now only supported on Apple devices
+#  define TRACY_HAS_CNTVCT
+#endif
+
+#if !defined TRACY_DISALLOW_HW_TIMER 
+#  if ( defined TRACY_HAS_RDTSC || defined TRACY_HAS_CNTVCT )
+#    define TRACY_HW_TIMER
+#  elif defined TARGET_OS_IOS && TARGET_OS_IOS == 1 // For now, !defined(TRACY_HW_TIMER) implies TRACY_TIMER_FALLBACK, so define TRACY_HW_TIMER to use mach_absolute_time() on iOS
+#    define TRACY_HW_TIMER
+#  endif
 #endif
 
 #ifdef __linux__
@@ -72,7 +86,8 @@ struct GpuCtxWrapper
 };
 
 TRACY_API moodycamel::ConcurrentQueue<QueueItem>::ExplicitProducer* GetToken();
-TRACY_API Profiler& GetProfiler();
+TRACY_API Profiler& MANGLED_NAME_BASED_ON_CONFIG(GetProfiler)();
+tracy_force_inline Profiler& GetProfiler() { return MANGLED_NAME_BASED_ON_CONFIG(GetProfiler)(); }
 TRACY_API std::atomic<uint32_t>& GetLockCounter();
 TRACY_API std::atomic<uint8_t>& GetGpuCtxCounter();
 TRACY_API GpuCtxWrapper& GetGpuCtx();
@@ -81,7 +96,7 @@ TRACY_API bool ProfilerAvailable();
 TRACY_API bool ProfilerAllocatorAvailable();
 TRACY_API int64_t GetFrequencyQpc();
 
-#if defined TRACY_TIMER_FALLBACK && defined TRACY_HW_TIMER && ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+#if defined TRACY_TIMER_FALLBACK && defined TRACY_HW_TIMER && defined TRACY_HAS_RDTSC
 TRACY_API bool HardwareSupportsInvariantTSC();  // check, if we need fallback scenario
 #else
 #  if defined TRACY_HW_TIMER
@@ -161,6 +176,27 @@ struct LuaZoneState
 typedef void(*ParameterCallback)( void* data, uint32_t idx, int32_t val );
 typedef char*(*SourceContentsCallback)( void* data, const char* filename, size_t& size );
 
+#if defined _WIN32 && defined TRACY_HAS_CNTVCT
+// NOTE: implementing timestamp_win_arm64_cntvct_el0() requires ARM64_CNTVCT_EL0,
+// which in turn would require including "Windows.h" here... instead, just bring
+// what's needed from "winnt.h"
+#  ifdef ARM64_CNTVCT_EL0
+#    define TRACY_WINARM64_CNTVCT_EL0 ARM64_CNTVCT_EL0
+#  else
+#    define TRACY_WINARM64_SYSREG( op0, op1, crn, crm, op2 ) \
+        ( ( ( op0 & 1 ) << 14 ) |                            \
+          ( ( op1 & 7 ) << 11 ) |                            \
+          ( ( crn & 15 ) << 7 ) |                            \
+          ( ( crm & 15 ) << 3 ) |                            \
+          ( ( op2 & 7 ) << 0 ) )
+#    define TRACY_WINARM64_CNTVCT_EL0 TRACY_WINARM64_SYSREG( 3, 3, 14, 0, 2 )
+#  endif
+tracy_force_inline int64_t timestamp_win_arm64_cntvct_el0()
+{
+    return _ReadStatusReg( TRACY_WINARM64_CNTVCT_EL0 );
+}
+#endif
+
 class Profiler
 {
     struct FrameImageQueueItem
@@ -216,7 +252,9 @@ public:
 #  elif defined _WIN32
 #    ifdef TRACY_TIMER_QPC
         return GetTimeQpc();
-#    else
+#    elif defined TRACY_HAS_CNTVCT
+        return timestamp_win_arm64_cntvct_el0();
+#    elif defined TRACY_HAS_RDTSC
         if( HardwareSupportsInvariantTSC() ) return int64_t( __rdtsc() );
 #    endif
 #  elif defined __i386 || defined _M_IX86
@@ -479,7 +517,7 @@ public:
         assert( size < (std::numeric_limits<uint16_t>::max)() );
         auto ptr = (char*)tracy_malloc( size );
         memcpy( ptr, txt, size );
-        TaggedUserlandAddress taggedPtr{ (uint64_t)txt, MakeMessageMetadata( MessageSourceType::User, MessageSeverity::Info ) };
+        TaggedUserlandAddress taggedPtr{ (uint64_t)ptr, MakeMessageMetadata( MessageSourceType::User, MessageSeverity::Info ) };
 
         TracyLfqPrepare( QueueType::MessageAppInfo );
         MemWrite( &item->messageFat.time, GetTime() );
@@ -750,8 +788,8 @@ public:
     }
 #endif
 
-    void SendCallstack( int32_t depth, const char* skipBefore );
-    static void CutCallstack( void* callstack, const char* skipBefore );
+    void SendCallstack( int32_t depth, const char** skipBefore );
+    static void CutCallstack( void* callstack, const char** skipBefore );
 
     static bool ShouldExit();
 
@@ -1041,6 +1079,8 @@ private:
 #endif
 
     SPSCQueue<SymbolQueueItem> m_symbolQueue;
+    std::condition_variable m_symbolQueueSignal;
+    std::mutex m_symbolQueueMutex;
 
     std::atomic<uint64_t> m_frameCount;
     std::atomic<bool> m_isConnected;

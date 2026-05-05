@@ -26,7 +26,7 @@ else()
     CPMAddPackage(
         NAME capstone
         GITHUB_REPOSITORY capstone-engine/capstone
-        GIT_TAG 6.0.0-Alpha5
+        GIT_TAG 6.0.0-Alpha7
         OPTIONS
             "CAPSTONE_X86_ATT_DISABLE ON"
             "CAPSTONE_ALPHA_SUPPORT OFF"
@@ -94,7 +94,7 @@ else()
     CPMAddPackage(
         NAME freetype
         GITHUB_REPOSITORY freetype/freetype
-        GIT_TAG VER-2-14-1
+        GIT_TAG VER-2-14-3
         OPTIONS
             "FT_DISABLE_HARFBUZZ ON"
             "FT_WITH_HARFBUZZ OFF"
@@ -137,7 +137,7 @@ target_include_directories(TracyGetOpt PUBLIC ${GETOPT_DIR})
 CPMAddPackage(
     NAME ImGui
     GITHUB_REPOSITORY ocornut/imgui
-    GIT_TAG v1.92.5-docking
+    GIT_TAG v1.92.7-docking
     DOWNLOAD_ONLY TRUE
     PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/imgui-emscripten.patch"
@@ -160,6 +160,7 @@ add_library(TracyImGui STATIC EXCLUDE_FROM_ALL ${IMGUI_SOURCES})
 target_include_directories(TracyImGui PUBLIC ${ImGui_SOURCE_DIR})
 target_link_libraries(TracyImGui PUBLIC TracyFreetype)
 target_compile_definitions(TracyImGui PRIVATE "IMGUI_ENABLE_FREETYPE")
+target_compile_definitions(TracyImGui PUBLIC "IMGUI_USE_WCHAR32")
 #target_compile_definitions(TracyImGui PUBLIC "IMGUI_DISABLE_OBSOLETE_FUNCTIONS")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LEGACY)
@@ -183,7 +184,7 @@ if(NOT NO_FILESELECTOR AND NOT EMSCRIPTEN)
     CPMAddPackage(
         NAME nfd
         GITHUB_REPOSITORY btzy/nativefiledialog-extended
-        GIT_TAG v1.2.1
+        GIT_TAG v1.3.0
         EXCLUDE_FROM_ALL TRUE
         OPTIONS
             "NFD_PORTAL ${NFD_PORTAL}"
@@ -198,6 +199,7 @@ CPMAddPackage(
     VERSION 1.0.6
     PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/ppqsort-nodebug.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/ppqsort-semaphore.patch"
     EXCLUDE_FROM_ALL TRUE
 )
 
@@ -252,7 +254,7 @@ if(NOT EMSCRIPTEN)
     CPMAddPackage(
         NAME usearch
         GITHUB_REPOSITORY unum-cloud/usearch
-        GIT_TAG v2.22.0
+        GIT_TAG v2.23.0
         EXCLUDE_FROM_ALL TRUE
     )
 
@@ -285,7 +287,7 @@ if(NOT EMSCRIPTEN)
         CPMAddPackage(
             NAME libcurl
             GITHUB_REPOSITORY curl/curl
-            GIT_TAG curl-8_17_0
+            GIT_TAG curl-8_19_0
             OPTIONS
                 "BUILD_STATIC_LIBS ON"
                 "BUILD_SHARED_LIBS OFF"

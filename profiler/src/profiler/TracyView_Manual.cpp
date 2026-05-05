@@ -5,6 +5,7 @@
 #include "TracyManualData.hpp"
 #include "TracyMarkdown.hpp"
 #include "TracyView.hpp"
+#include "../Fonts.hpp"
 
 namespace tracy
 {
@@ -12,7 +13,7 @@ namespace tracy
 void View::DrawManual()
 {
     const auto scale = GetScale();
-    ImGui::SetNextWindowSize( ImVec2( 1200 * scale, 800 * scale ), ImGuiCond_Always );
+    ImGui::SetNextWindowSize( ImVec2( 1200 * scale, 800 * scale ), ImGuiCond_FirstUseEver );
     ImGui::Begin( "User manual", &m_showManual );
     if( ImGui::GetCurrentWindowRead()->SkipItems ) { ImGui::End(); return; }
 
@@ -78,13 +79,54 @@ void View::DrawManual()
     ImGui::NextColumn();
     ImGui::BeginChild( "##content", ImVec2( 0, 0 ), ImGuiChildFlags_AlwaysUseWindowPadding );
 
+    if( m_manualPositionReset )
+    {
+        ImGui::SetScrollY( 0 );
+        m_manualPositionReset = false;
+    }
+
     auto& chunk = chunks[m_activeManualChunk];
+
+    ImGui::PushFont( g_fonts.normal, FontBig );
+    if( chunk.section.empty() )
+    {
+        ImGui::TextUnformatted( chunk.title.c_str() );
+    }
+    else
+    {
+        ImGui::Text( "%s. %s", chunk.section.c_str(), chunk.title.c_str() );
+    }
+    ImGui::Dummy( ImVec2( 0, ImGui::GetTextLineHeight() * 0.25f ) );
+    ImGui::PopFont();
+
     m_markdown.Print( chunk.text.c_str(), chunk.text.size() );
 
     ImGui::EndChild();
     ImGui::EndColumns();
     ImGui::EndChild();
     ImGui::End();
+}
+
+const TracyManualData::ManualChunk* View::GetManualChunk( const char* anchor ) const
+{
+    assert( anchor && *anchor );
+    assert( m_manualData );
+
+    auto& chunks = m_manualData->GetChunks();
+    auto it = std::ranges::find_if( chunks, [anchor]( const auto& chunk ) { return chunk.link == anchor; } );
+    if( it != chunks.end() ) return &*it;
+    return nullptr;
+}
+
+bool View::ViewManualChunk( const char* anchor )
+{
+    assert( anchor && *anchor );
+    const auto chunk = GetManualChunk( anchor );
+    if( !chunk ) return false;
+    m_activeManualChunk = std::distance( m_manualData->GetChunks().data(), chunk );
+    m_showManual = true;
+    m_manualPositionReset = true;
+    return true;
 }
 
 }

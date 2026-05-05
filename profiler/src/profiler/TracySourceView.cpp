@@ -35,10 +35,16 @@ struct MicroArchUx
 };
 
 static constexpr MicroArchUx s_uArchUx[] = {
+    { "AMD Zen 5", "Ryzen 7 9700X", "ZEN5" },
     { "AMD Zen 4", "Ryzen 5 7600X", "ZEN4" },
     { "AMD Zen 3", "Ryzen 5 5600X", "ZEN3" },
     { "AMD Zen 2", "Ryzen 7 3700X", "ZEN2" },
     { "AMD Zen+", "Ryzen 5 2600", "ZEN+" },
+    { "Arrow Lake", "Core Ultra 7 265K", "ARL-P" },
+    { "Arrow Lake", "Core Ultra 7 265K", "ARL-E" },
+    { "Meteor Lake P", "Core Ultra 7 155H", "MTL-P" },
+    { "Meteor Lake E", "Core Ultra 7 155H", "MTL-E" },
+    { "Emerald Rapids", "Xeon Silver 4514Y", "EMR" },
     { "Alder Lake P", "Core i5-12600K", "ADL-P" },
     { "Alder Lake E", "Core i5-12600K", "ADL-E" },
     { "Rocket Lake", "Core i9-11900", "RKL" },
@@ -490,6 +496,7 @@ struct CpuIdMap
 static constexpr CpuIdMap s_cpuIdMap[] = {
     { PackCpuInfo( 0x810F81 ), "ZEN+" },
     { PackCpuInfo( 0x800F82 ), "ZEN+" },
+    // Zen2
     { PackCpuInfo( 0x830F10 ), "ZEN2" },
     { PackCpuInfo( 0x840F70 ), "ZEN2" },
     { PackCpuInfo( 0x860F01 ), "ZEN2" },
@@ -497,60 +504,109 @@ static constexpr CpuIdMap s_cpuIdMap[] = {
     { PackCpuInfo( 0x870F10 ), "ZEN2" },
     { PackCpuInfo( 0x890F00 ), "ZEN2" },
     { PackCpuInfo( 0x890F80 ), "ZEN2" },
+    // Zen3
     { PackCpuInfo( 0xA00F11 ), "ZEN3" },
     { PackCpuInfo( 0xA00F80 ), "ZEN3" },
+    { PackCpuInfo( 0xA00F82 ), "ZEN3" },
     { PackCpuInfo( 0xA20F10 ), "ZEN3" },
     { PackCpuInfo( 0xA20F12 ), "ZEN3" },
     { PackCpuInfo( 0xA30F00 ), "ZEN3" },
+    { PackCpuInfo( 0xA30F01 ), "ZEN3" },
     { PackCpuInfo( 0xA40F00 ), "ZEN3" },
     { PackCpuInfo( 0xA40F41 ), "ZEN3" },
     { PackCpuInfo( 0xA50F00 ), "ZEN3" },
+    // Zen4
     { PackCpuInfo( 0xA60F12 ), "ZEN4" },
+    { PackCpuInfo( 0xA60F13 ), "ZEN4" },
+    { PackCpuInfo( 0xA70F41 ), "ZEN4" },
+    { PackCpuInfo( 0xA70F52 ), "ZEN4" },
+    { PackCpuInfo( 0xA70F80 ), "ZEN4" },
+    { PackCpuInfo( 0xA70FC0 ), "ZEN4" },
+    { PackCpuInfo( 0xA80F01 ), "ZEN4" },
+    { PackCpuInfo( 0xA90F01 ), "ZEN4" },
     { PackCpuInfo( 0xA10F11 ), "ZEN4" },
+    { PackCpuInfo( 0xA10F12 ), "ZEN4" },
+    { PackCpuInfo( 0xA10F81 ), "ZEN4" },
+    // Zen5
+    { PackCpuInfo( 0xB00F20 ), "ZEN5" },
+    { PackCpuInfo( 0xB20F40 ), "ZEN5" },
+    { PackCpuInfo( 0xB30F00 ), "ZEN5" },
+    { PackCpuInfo( 0xB30F80 ), "ZEN5" },
+    { PackCpuInfo( 0xB40F40 ), "ZEN5" },
+    { PackCpuInfo( 0xB40F41 ), "ZEN5" },
+    { PackCpuInfo( 0xB60F00 ), "ZEN5" },
+    { PackCpuInfo( 0xB60F80 ), "ZEN5" },
+    { PackCpuInfo( 0xB70F00 ), "ZEN5" },
+    { PackCpuInfo( 0xBD0F00 ), "ZEN5" },
+    // Arrow Lake
+    { PackCpuInfo( 0x0B0650 ), "ARL-P" },
+    { PackCpuInfo( 0x0C0652 ), "ARL-P" },
+    { PackCpuInfo( 0x0C0662 ), "ARL-P" },
+    // Meteor Lake
+    { PackCpuInfo( 0x0A06A4 ), "MTL-P" },
+    { PackCpuInfo( 0x0A06C1 ), "MTL-P" },
+    // Emerald Rapids
+    { PackCpuInfo( 0x0C06F2 ), "EMR" },
+    // Alder Lake
     { PackCpuInfo( 0x090672 ), "ADL-P" },
     { PackCpuInfo( 0x090675 ), "ADL-P" },
     { PackCpuInfo( 0x0906A2 ), "ADL-P" },
     { PackCpuInfo( 0x0906A3 ), "ADL-P" },
     { PackCpuInfo( 0x0906A4 ), "ADL-P" },
+    // Rocket Lake
     { PackCpuInfo( 0x0A0671 ), "RKL" },
+    // Tiger Lake
     { PackCpuInfo( 0x0806C1 ), "TGL" },
     { PackCpuInfo( 0x0806D1 ), "TGL" },
+    // Ice Lake
     { PackCpuInfo( 0x0706E5 ), "ICL" },
     { PackCpuInfo( 0x0606A6 ), "ICL" },
+    // Cascade Lake
     { PackCpuInfo( 0x050656 ), "CLX" },
     { PackCpuInfo( 0x050657 ), "CLX" },
+    // Cannon Lake
     { PackCpuInfo( 0x060663 ), "CNL" },
+    // Coffee Lake
     { PackCpuInfo( 0x0906EA ), "CFL" },
     { PackCpuInfo( 0x0906EB ), "CFL" },
     { PackCpuInfo( 0x0906EC ), "CFL" },
     { PackCpuInfo( 0x0906ED ), "CFL" },
+    // Kaby Lake
     { PackCpuInfo( 0x0806E9 ), "KBL" },
     { PackCpuInfo( 0x0806EA ), "KBL" },
     { PackCpuInfo( 0x0906E9 ), "KBL" },
+    // Skylake-X
     { PackCpuInfo( 0x050654 ), "SKX" },
+    // Skylake
     { PackCpuInfo( 0x0406E3 ), "SKL" },
     { PackCpuInfo( 0x0506E0 ), "SKL" },
     { PackCpuInfo( 0x0506E3 ), "SKL" },
+    // Broadwell
     { PackCpuInfo( 0x0306D4 ), "BDW" },
     { PackCpuInfo( 0x040671 ), "BDW" },
     { PackCpuInfo( 0x0406F1 ), "BDW" },
+    // Haswell
     { PackCpuInfo( 0x0306C3 ), "HSW" },
     { PackCpuInfo( 0x0306F2 ), "HSW" },
     { PackCpuInfo( 0x040651 ), "HSW" },
+    // Ivy Bridge
     { PackCpuInfo( 0x0306A9 ), "IVB" },
     { PackCpuInfo( 0x0306E3 ), "IVB" },
     { PackCpuInfo( 0x0306E4 ), "IVB" },
+    // Sandy Bridge
     { PackCpuInfo( 0x0206A2 ), "SNB" },
     { PackCpuInfo( 0x0206A7 ), "SNB" },
     { PackCpuInfo( 0x0206D5 ), "SNB" },
     { PackCpuInfo( 0x0206D6 ), "SNB" },
     { PackCpuInfo( 0x0206D7 ), "SNB" },
+    // Westmere
     { PackCpuInfo( 0x0206F2 ), "WSM" },
     { PackCpuInfo( 0x0206C0 ), "WSM" },
     { PackCpuInfo( 0x0206C1 ), "WSM" },
     { PackCpuInfo( 0x0206C2 ), "WSM" },
     { PackCpuInfo( 0x020652 ), "WSM" },
     { PackCpuInfo( 0x020655 ), "WSM" },
+    // Nehalem
     { PackCpuInfo( 0x0206E6 ), "NHM" },
     { PackCpuInfo( 0x0106A1 ), "NHM" },
     { PackCpuInfo( 0x0106A2 ), "NHM" },
@@ -558,20 +614,27 @@ static constexpr CpuIdMap s_cpuIdMap[] = {
     { PackCpuInfo( 0x0106A5 ), "NHM" },
     { PackCpuInfo( 0x0106E4 ), "NHM" },
     { PackCpuInfo( 0x0106E5 ), "NHM" },
+    // Wolfdale
     { PackCpuInfo( 0x010676 ), "WOL" },
     { PackCpuInfo( 0x01067A ), "WOL" },
+    // Conroe
     { PackCpuInfo( 0x0006F2 ), "CON" },
     { PackCpuInfo( 0x0006F4 ), "CON" },
     { PackCpuInfo( 0x0006F6 ), "CON" },
     { PackCpuInfo( 0x0006FB ), "CON" },
     { PackCpuInfo( 0x0006FD ), "CON" },
+    // Bonnell
     { PackCpuInfo( 0x0106C2 ), "BNL" },
     { PackCpuInfo( 0x0106CA ), "BNL" },
+    // Airmont
     { PackCpuInfo( 0x07065A ), "AMT" },
+    // Goldmont
     { PackCpuInfo( 0x0506C9 ), "GLM" },
     { PackCpuInfo( 0x0506F1 ), "GLM" },
+    // Goldmont Plus
     { PackCpuInfo( 0x0706A1 ), "GLP" },
     { PackCpuInfo( 0x0706A8 ), "GLP" },
+    // Tremont
     { PackCpuInfo( 0x0806A1 ), "TRM" },
     { PackCpuInfo( 0x090661 ), "TRM" },
     { PackCpuInfo( 0x0906C0 ), "TRM" },
@@ -618,6 +681,7 @@ void SourceView::OpenSymbol( const char* fileName, int line, uint64_t baseAddr, 
     m_sourceFiles.clear();
     m_selectedAddresses.clear();
     m_selectedAddresses.emplace( symAddr );
+    m_childCallHeight = 0;
 
     ParseSource( fileName, worker, view );
     Disassemble( baseAddr, worker );
@@ -966,7 +1030,7 @@ bool SourceView::Disassemble( uint64_t symAddr, const Worker& worker )
             uint32_t mLineMax = 0;
             uint32_t srcline;
             const auto srcidx = worker.GetLocationForAddress( op.address, srcline );
-            if( srcline != 0 )
+            if( srcidx.Active() )
             {
                 if( srcline > mLineMax ) mLineMax = srcline;
                 const auto idx = srcidx.Idx();
@@ -1066,6 +1130,19 @@ void SourceView::Render( Worker& worker, View& view )
             std::ostringstream stream;
             stream.write( m_source.data(), m_source.data_size() );
             ImGui::SetClipboardText( stream.str().c_str() );
+        }
+        if( s_config.llm )
+        {
+            ImGui::SameLine();
+            if( ImGui::SmallButton( ICON_FA_ROBOT ) )
+            {
+                nlohmann::json json = {
+                    { "type", "source", },
+                    { "file", m_source.filename(), },
+                    { "code", std::string( m_source.data(), m_source.data_size() ) }
+                };
+                view.AddLlmAttachment( json );
+            }
         }
         ImGui::PopFont();
         ImGui::SameLine();
@@ -1647,8 +1724,10 @@ void SourceView::RenderSymbolView( Worker& worker, View& view )
         }
         if( !map.empty() )
         {
+            if( m_childCallHeight == 0 ) m_childCallHeight = ImGui::GetTextLineHeightWithSpacing() * std::min<float>( 4.5f, map.size() );
+
             TextDisabledUnformatted( "Child call distribution" );
-            if( ImGui::BeginChild( "ccd", ImVec2( 0, ImGui::GetTextLineHeight() * std::min<size_t>( 4, map.size() ) + ImGui::GetStyle().WindowPadding.y ) ) )
+            if( ImGui::BeginChild( "ccd", ImVec2( 0, m_childCallHeight ) ) )
             {
                 std::vector<ChildStat> vec;
                 vec.reserve( map.size() );
@@ -1716,6 +1795,12 @@ void SourceView::RenderSymbolView( Worker& worker, View& view )
                 }
             }
             ImGui::EndChild();
+            if( map.size() >= 4 )
+            {
+                const auto minSize = ImGui::GetTextLineHeightWithSpacing() * 2.5f;
+                const auto maxSize = ImGui::GetTextLineHeightWithSpacing() * map.size();
+                DragHeightSplitter( "##childCallHeight", m_childCallHeight, minSize, std::clamp( ImGui::GetContentRegionAvail().y - 100 * GetScale(), minSize, maxSize ), 4.f * GetScale() );
+            }
             ImGui::Separator();
         }
     }
@@ -1852,7 +1937,7 @@ static uint32_t GetGoodnessColor( float inRatio )
     return GoodnessColor[ratio];
 }
 
-void SourceView::RenderSymbolSourceView( const AddrStatData& as, Worker& worker, const View& view, bool hasInlines )
+void SourceView::RenderSymbolSourceView( const AddrStatData& as, Worker& worker, View& view, bool hasInlines )
 {
     const auto scale = GetScale();
     if( hasInlines && !m_calcInlineStats && ( ( as.ipTotalAsm.local + as.ipTotalAsm.ext ) > 0 || ( view.m_statRange.active && worker.GetSamplesForSymbol( m_baseAddr ) ) ) )
@@ -1916,6 +2001,41 @@ void SourceView::RenderSymbolSourceView( const AddrStatData& as, Worker& worker,
                 ImGui::EndTooltip();
             }
         }
+        if( s_config.llm )
+        {
+            ImGui::SameLine();
+            if( ImGui::SmallButton( ICON_FA_ROBOT "##src" ) )
+            {
+                nlohmann::json json = {
+                    { "type", "source", },
+                    { "file", m_source.filename() },
+                    { "hint", "Each line starts with a line number, then optional ';' and the execution cost, then ':', then the actual line content." }
+                };
+
+                std::string code;
+                auto& lines = m_source.get();
+
+                int idx = 1;
+                for( auto& line : lines )
+                {
+                    code += std::to_string( idx );
+
+                    auto it = as.ipCountSrc.find( idx );
+                    if( it != as.ipCountSrc.end() )
+                    {
+                        char buf[32];
+                        snprintf( buf, sizeof(buf), "%.4f%%", 100.f * it->second.local / as.ipTotalSrc.local );
+                        code += ";" + std::string( buf );
+                    }
+
+                    code += ":" + std::string( line.begin, line.end ) + "\n";
+                    idx++;
+                }
+
+                json["code"] = std::move( code );
+                view.AddLlmAttachment( json );
+            }
+        }
         ImGui::SameLine();
         TextDisabledUnformatted( ICON_FA_FILE " File:" );
         ImGui::SameLine();
@@ -1959,7 +2079,7 @@ void SourceView::RenderSymbolSourceView( const AddrStatData& as, Worker& worker,
                 {
                     uint32_t srcline;
                     const auto srcidx = worker.GetLocationForAddress( v.addr, srcline );
-                    if( srcline != 0 )
+                    if( srcidx.Active() )
                     {
                         AddrStat cnt = {};
                         auto ait = as.ipCountAsm.find( v.addr );
@@ -2186,7 +2306,7 @@ void SourceView::RenderSymbolSourceView( const AddrStatData& as, Worker& worker,
         for( auto& v : as.ipCountSrc ) ipData.emplace_back( v.first, v.second );
         for( uint32_t lineNum = 1; lineNum <= lines.size(); lineNum++ )
         {
-            if( as.ipCountSrc.find( lineNum ) == as.ipCountSrc.end() )
+            if( !as.ipCountSrc.contains( lineNum ) )
             {
                 auto addresses = GetAddressesForLocation( m_source.idx(), lineNum, worker );
                 if( addresses )
@@ -2409,6 +2529,151 @@ std::tuple<size_t, size_t> SourceView::GetJumpRange( const JumpData& jump )
     return std::make_tuple( minIdx, maxIdx );
 }
 
+void SourceView::AttachRangeToLlm( size_t start, size_t stop, Worker& worker, View& view, const AddrStatData& as )
+{
+    auto sym = worker.GetSymbolData( m_symAddr );
+    assert( sym );
+    const char* symName;
+    if( sym->isInline )
+    {
+        auto parent = worker.GetSymbolData( m_baseAddr );
+        if( parent )
+        {
+            symName = worker.GetString( parent->name );
+        }
+        else
+        {
+            char tmp[32];
+            sprintf( tmp, "0x%" PRIx64, m_baseAddr );
+            symName = tmp;
+        }
+    }
+    else
+    {
+        symName = worker.GetString( sym->name );
+    }
+
+    nlohmann::json json = {
+        { "type", "assembly" },
+        { "symbol", symName },
+        { "files", nlohmann::json::object() },
+        { "hint", "Code lines format is: fileIdx:line:offset:cost:assembly. To decode file names, access files[fileIdx]. Never show undecoded fileIdx to user." }
+    };
+
+    std::vector<std::string> sources;
+    std::string code;
+
+    const auto end = m_asm.size() < stop ? m_asm.size() : stop;
+    for( size_t i=start; i<end; i++ )
+    {
+        const auto& v = m_asm[i];
+        std::string line;
+
+        uint32_t srcline;
+        const auto srcidx = worker.GetLocationForAddress( v.addr, srcline );
+        if( srcidx.Active() )
+        {
+            size_t idx;
+            const auto file = worker.GetString( srcidx );
+            auto it = std::ranges::find( sources, file );
+            if( it == sources.end() )
+            {
+                idx = sources.size();
+                sources.emplace_back( file );
+            }
+            else
+            {
+                idx = std::distance( sources.begin(), it );
+            }
+
+            line = std::to_string( idx ) + ":" + std::to_string( srcline ) + ":";
+        }
+        else
+        {
+            line = "-:-:";
+        }
+
+        line += "+" + std::to_string( m_asm[i].addr - m_baseAddr ) + ":";
+
+        bool hasCost = false;
+        if( as.ipTotalAsm.local + as.ipTotalAsm.ext != 0 )
+        {
+            char buf[32];
+            auto it = as.ipCountAsm.find( v.addr );
+            if( it != as.ipCountAsm.end() )
+            {
+                auto& stat = it->second;
+                if( stat.local != 0 )
+                {
+                    snprintf( buf, sizeof(buf), "%.4f%%:", 100.0f * stat.local / as.ipTotalAsm.local );
+                    line += buf;
+                    hasCost = true;
+                }
+            }
+        }
+        if( !hasCost ) line += "-:";
+
+        line += v.mnemonic;
+
+        const char* jumpName = nullptr;
+        bool hasJump = false;
+        if( v.jumpAddr != 0 )
+        {
+            auto lit = m_locMap.find( v.jumpAddr );
+            if( lit != m_locMap.end() )
+            {
+                line += " .L" + std::to_string( lit->second );
+                hasJump = true;
+            }
+            else
+            {
+                uint32_t jumpOffset;
+                uint64_t jumpBase = worker.GetSymbolForAddress( v.jumpAddr, jumpOffset );
+                if( jumpBase && jumpBase != m_baseAddr )
+                {
+                    auto jumpSym = worker.GetSymbolData( jumpBase );
+                    if( jumpSym )
+                    {
+                        if( worker.HasInlineSymbolAddresses() )
+                        {
+                            const auto symAddr = worker.GetInlineSymbolForAddress( v.jumpAddr );
+                            if( symAddr != 0 )
+                            {
+                                const auto symData = worker.GetSymbolData( symAddr );
+                                if( symData ) jumpName = worker.GetString( symData->name );
+                            }
+                        }
+                        if( !jumpName ) jumpName = worker.GetString( jumpSym->name );
+                    }
+                }
+            }
+        }
+        if( !hasJump && !v.operands.empty() ) line += " " + v.operands;
+
+        std::string label;
+        auto it = m_locMap.find( v.addr );
+        if( it != m_locMap.end() ) label = ".L" + std::to_string( it->second );
+
+        if( jumpName || !label.empty() )
+        {
+            line += ";";
+            if( !label.empty() ) line += " label: " + label;
+            if( jumpName ) line += " destination: " + std::string( jumpName );
+        }
+
+        code += line + "\n";
+    }
+
+    json["code"] = code;
+
+    for( size_t i=0; i<sources.size(); i++ )
+    {
+        json["files"][std::to_string( i )] = sources[i];
+    }
+
+    view.AddLlmAttachment( json );
+}
+
 uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker, View& view )
 {
     const auto scale = GetScale();
@@ -2515,6 +2780,17 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
     ImGui::SameLine();
     TextFocused( ICON_FA_WEIGHT_HANGING, MemSizeToString( m_codeLen ) );
     TooltipIfHovered( "Code size" );
+
+    if( s_config.llm )
+    {
+        ImGui::SameLine();
+        ImGui::Spacing();
+        ImGui::SameLine();
+        if( ImGui::SmallButton( ICON_FA_ROBOT ) )
+        {
+            AttachRangeToLlm( 0, m_asm.size(), worker, view, as );
+        }
+    }
 
 #ifndef TRACY_NO_FILESELECTOR
     ImGui::SameLine();
@@ -2642,14 +2918,21 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
                         TextFocused( "Jump label:", tmp );
                         uint32_t srcline;
                         const auto srcidx = worker.GetLocationForAddress( v.first, srcline );
-                        if( srcline != 0 )
+                        if( srcidx.Active() )
                         {
                             const auto fileName = worker.GetString( srcidx );
                             const auto fileColor = GetHsvColor( srcidx.Idx(), 0 );
                             TextDisabledUnformatted( "Target location:" );
                             SmallColorBox( fileColor );
                             ImGui::SameLine();
-                            ImGui::Text( "%s:%i", fileName, srcline );
+                            if( srcline != 0 )
+                            {
+                                ImGui::Text( "%s:%i", fileName, srcline );
+                            }
+                            else
+                            {
+                                ImGui::Text( "%s", fileName );
+                            }
                             const auto symAddr = worker.GetInlineSymbolForAddress( v.first );
                             if( symAddr != 0 )
                             {
@@ -2772,80 +3055,8 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
                 needSeparator = true;
                 if( ImGui::MenuItem( ICON_FA_ROBOT " Attach jump range in chat" ) )
                 {
-                    auto sym = worker.GetSymbolData( m_symAddr );
-                    assert( sym );
-                    const char* symName;
-                    if( sym->isInline )
-                    {
-                        auto parent = worker.GetSymbolData( m_baseAddr );
-                        if( parent )
-                        {
-                            symName = worker.GetString( parent->name );
-                        }
-                        else
-                        {
-                            char tmp[32];
-                            sprintf( tmp, "0x%" PRIx64, m_baseAddr );
-                            symName = tmp;
-                        }
-                    }
-                    else
-                    {
-                        symName = worker.GetString( sym->name );
-                    }
-
-                    nlohmann::json json = {
-                        { "type", "assembly" },
-                        { "symbol", symName },
-                        { "code", nlohmann::json::array() }
-                    };
-                    auto& code = json["code"];
-
                     auto [start, stop] = GetJumpRange( it->second );
-                    const auto end = m_asm.size() < stop ? m_asm.size() : stop;
-                    for( size_t i=start; i<end; i++ )
-                    {
-                        const auto& v = m_asm[i];
-                        nlohmann::json line;
-
-                        auto it = m_locMap.find( v.addr );
-                        if( it != m_locMap.end() ) line["label"] = ".L" + std::to_string( it->second );
-
-                        bool hasJump = false;
-                        if( v.jumpAddr != 0 )
-                        {
-                            auto lit = m_locMap.find( v.jumpAddr );
-                            if( lit != m_locMap.end() )
-                            {
-                                line["asm"] = v.mnemonic + " .L" + std::to_string( lit->second );
-                                hasJump = true;
-                            }
-                        }
-                        if( !hasJump )
-                        {
-                            if( v.operands.empty() )
-                            {
-                                line["asm"] = v.mnemonic;
-                            }
-                            else
-                            {
-                                line["asm"] = v.mnemonic + " " + v.operands;
-                            }
-                        }
-                        uint32_t srcline;
-                        const auto srcidx = worker.GetLocationForAddress( v.addr, srcline );
-                        if( srcline != 0 )
-                        {
-                            line["source"] = {
-                                { "file", worker.GetString( srcidx ) },
-                                { "line", srcline }
-                            };
-                        }
-
-                        code.emplace_back( std::move( line ) );
-                    }
-
-                    view.AddLlmAttachment( json );
+                    AttachRangeToLlm( start, stop, worker, view, as );
                 }
             }
             if( needSeparator ) ImGui::Separator();
@@ -2910,14 +3121,22 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
             {
                 uint32_t srcline;
                 const auto srcidx = worker.GetLocationForAddress( m_jumpPopupAddr, srcline );
-                const auto fileName = srcline != 0 ? worker.GetString( srcidx ) : nullptr;
-                const auto fileColor = srcline != 0 ? GetHsvColor( srcidx.Idx(), 0 ) : 0;
+                const auto active = srcidx.Active();
+                const auto fileName = active ? worker.GetString( srcidx ) : nullptr;
+                const auto fileColor = active ? GetHsvColor( srcidx.Idx(), 0 ) : 0;
                 SmallColorBox( fileColor );
                 ImGui::SameLine();
                 char buf[1024];
                 if( fileName )
                 {
-                    snprintf( buf, 1024, "%s:%i", fileName, srcline );
+                    if( srcline != 0 )
+                    {
+                        snprintf( buf, sizeof( buf ), "%s:%i", fileName, srcline );
+                    }
+                    else
+                    {
+                        snprintf( buf, sizeof( buf ), "%s", fileName );
+                    }
                 }
                 else
                 {
@@ -2928,7 +3147,7 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
                     {
                         const auto jumpName = worker.GetString( jumpSym->name );
                         const auto normalized = view.GetShortenName() != ShortenName::Never ? ShortenZoneName( ShortenName::OnlyNormalize, jumpName ) : jumpName;
-                        snprintf( buf, 1024, "%s+%" PRIu32, normalized, jumpOffset );
+                        snprintf( buf, sizeof( buf ), "%s+%" PRIu32, normalized, jumpOffset );
                     }
                     else
                     {
@@ -2978,42 +3197,49 @@ uint64_t SourceView::RenderSymbolAsmView( const AddrStatData& as, Worker& worker
                 const auto normalized = view.GetShortenName() != ShortenName::Never ? ShortenZoneName( ShortenName::OnlyNormalize, symName ) : symName;
                 const auto fn = worker.GetString( lcs->data[i].file );
                 const auto srcline = lcs->data[i].line;
-                if( ImGui::BeginMenu( normalized ) )
+                if( srcline != 0 )
                 {
-                    if( SourceFileValid( fn, worker.GetCaptureTime(), view, worker ) )
+                    if( ImGui::BeginMenu( normalized ) )
                     {
-                        m_sourceTooltip.Parse( fn, worker, view );
-                        if( !m_sourceTooltip.empty() )
+                        if( SourceFileValid( fn, worker.GetCaptureTime(), view, worker ) )
                         {
-                            ImGui::PushFont( g_fonts.normal, FontSmall );
-                            ImGui::TextDisabled( "%s:%i", fn, srcline );
-                            ImGui::PopFont();
-                            ImGui::Separator();
-                            SetFont();
-                            PrintSourceFragment( m_sourceTooltip, srcline );
-                            UnsetFont();
+                            m_sourceTooltip.Parse( fn, worker, view );
+                            if( !m_sourceTooltip.empty() )
+                            {
+                                ImGui::PushFont( g_fonts.normal, FontSmall );
+                                ImGui::TextDisabled( "%s:%i", fn, srcline );
+                                ImGui::PopFont();
+                                ImGui::Separator();
+                                SetFont();
+                                PrintSourceFragment( m_sourceTooltip, srcline );
+                                UnsetFont();
+                            }
+                        }
+                        else
+                        {
+                            TextDisabledUnformatted( "Source not available" );
+                        }
+                        ImGui::EndMenu();
+                        if( ImGui::IsItemClicked() )
+                        {
+                            m_targetLine = srcline;
+                            if( m_source.filename() == fn )
+                            {
+                                SelectLine( srcline, &worker, false );
+                                m_displayMode = DisplayMixed;
+                            }
+                            else if( SourceFileValid( fn, worker.GetCaptureTime(), view, worker ) )
+                            {
+                                ParseSource( fn, worker, view );
+                                SelectLine( srcline, &worker, false );
+                                SelectViewMode();
+                            }
                         }
                     }
-                    else
-                    {
-                        TextDisabledUnformatted( "Source not available" );
-                    }
-                    ImGui::EndMenu();
-                    if( ImGui::IsItemClicked() )
-                    {
-                        m_targetLine = srcline;
-                        if( m_source.filename() == fn )
-                        {
-                            SelectLine( srcline, &worker, false );
-                            m_displayMode = DisplayMixed;
-                        }
-                        else if( SourceFileValid( fn, worker.GetCaptureTime(), view, worker ) )
-                        {
-                            ParseSource( fn, worker, view );
-                            SelectLine( srcline, &worker, false );
-                            SelectViewMode();
-                        }
-                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled( "%s", normalized );
                 }
                 ImGui::PopID();
             }
@@ -3965,7 +4191,7 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
         ImVec2 startPos;
         uint32_t srcline;
         const auto srcidx = worker.GetLocationForAddress( line.addr, srcline );
-        if( srcline != 0 )
+        if( srcidx.Active() )
         {
             const auto fileName = worker.GetString( srcidx );
             const auto fileColor = GetHsvColor( srcidx.Idx(), 0 );
@@ -3978,11 +4204,25 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
             const auto fnsz = strlen( fileName );
             if( fnsz < MaxSourceLength - m_maxLine )
             {
-                sprintf( buf, "%s:%i", fileName, srcline );
+                if( srcline != 0 )
+                {
+                    snprintf( buf, sizeof( buf ), "%s:%i", fileName, srcline );
+                }
+                else
+                {
+                    snprintf( buf, sizeof( buf ), "%s", fileName );
+                }
             }
             else
             {
-                sprintf( buf, "\xe2\x80\xa6%s:%i", fileName+fnsz-(MaxSourceLength-1-1-m_maxLine), srcline );
+                if( srcline != 0 )
+                {
+                    snprintf( buf, sizeof( buf ), "\xe2\x80\xa6%s:%i", fileName+fnsz-(MaxSourceLength-1-1-m_maxLine), srcline );
+                }
+                else
+                {
+                    snprintf( buf, sizeof( buf ), "\xe2\x80\xa6%s", fileName+fnsz-(MaxSourceLength-1-1-m_maxLine) );
+                }
             }
             TextDisabledUnformatted( buf );
             if( ImGui::IsItemHovered() )
@@ -4013,16 +4253,19 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                     }
                 }
                 TextFocused( "File:", fileName );
-                TextFocused( "Line:", RealToString( srcline ) );
-                if( SourceFileValid( fileName, worker.GetCaptureTime(), view, worker ) )
+                if( srcline != 0 )
                 {
-                    m_sourceTooltip.Parse( fileName, worker, view );
-                    if( !m_sourceTooltip.empty() )
+                    TextFocused( "Line:", RealToString( srcline ) );
+                    if( SourceFileValid( fileName, worker.GetCaptureTime(), view, worker ) )
                     {
-                        ImGui::Separator();
-                        SetFont();
-                        PrintSourceFragment( m_sourceTooltip, srcline );
-                        UnsetFont();
+                        m_sourceTooltip.Parse( fileName, worker, view );
+                        if( !m_sourceTooltip.empty() )
+                        {
+                            ImGui::Separator();
+                            SetFont();
+                            PrintSourceFragment( m_sourceTooltip, srcline );
+                            UnsetFont();
+                        }
                     }
                 }
                 const auto frame = worker.GetCallstackFrame( worker.PackPointer( line.addr ) );
@@ -4040,7 +4283,15 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                         ImGui::SameLine();
                         ImGui::PushFont( g_fonts.normal, FontSmall );
                         ImGui::AlignTextToFramePadding();
-                        ImGui::TextDisabled( "%s:%i", worker.GetString( frame->data[i].file ), frame->data[i].line );
+                        const auto srcline = frame->data[i].line;
+                        if( srcline != 0 )
+                        {
+                            ImGui::TextDisabled( "%s:%i", worker.GetString( frame->data[i].file ), srcline );
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled( "%s", worker.GetString( frame->data[i].file ) );
+                        }
                         ImGui::PopFont();
                     }
                 }
@@ -4342,7 +4593,7 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                     {
                         uint32_t srcline;
                         const auto srcidx = worker.GetLocationForAddress( line.jumpAddr, srcline );
-                        if( srcline != 0 )
+                        if( srcidx.Active() )
                         {
                             const auto fileName = worker.GetString( srcidx );
                             const auto fileColor = GetHsvColor( srcidx.Idx(), 0 );
@@ -4350,7 +4601,14 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                             ImGui::SameLine();
                             SmallColorBox( fileColor );
                             ImGui::SameLine();
-                            ImGui::Text( "%s:%i", fileName, srcline );
+                            if( srcline != 0 )
+                            {
+                                ImGui::Text( "%s:%i", fileName, srcline );
+                            }
+                            else
+                            {
+                                ImGui::Text( "%s", fileName );
+                            }
                         }
                     }
                 }
@@ -4494,7 +4752,7 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
             {
                 uint32_t srcline;
                 const auto srcidx = worker.GetLocationForAddress( line.jumpAddr, srcline );
-                if( srcline != 0 )
+                if( srcidx.Active() )
                 {
                     const auto fileName = worker.GetString( srcidx );
                     const auto fileColor = GetHsvColor( srcidx.Idx(), 0 );
@@ -4502,7 +4760,14 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                     ImGui::SameLine();
                     SmallColorBox( fileColor );
                     ImGui::SameLine();
-                    ImGui::Text( "%s:%i", fileName, srcline );
+                    if( srcline != 0 )
+                    {
+                        ImGui::Text( "%s:%i", fileName, srcline );
+                    }
+                    else
+                    {
+                        ImGui::Text( "%s", fileName );
+                    }
                 }
             }
             ImGui::EndTooltip();
@@ -4673,18 +4938,15 @@ void SourceView::RenderAsmLine( AsmLine& line, const AddrStat& ipcnt, const Addr
                 if( srcline != 0 )
                 {
                     const auto fileName = worker.GetString( srcidx );
-                    if( fileName )
+                    if( fileName && SourceFileValid( fileName, worker.GetCaptureTime(), view, worker ) )
                     {
-                        if( SourceFileValid( fileName, worker.GetCaptureTime(), view, worker ) )
+                        m_sourceTooltip.Parse( fileName, worker, view );
+                        if( !m_sourceTooltip.empty() )
                         {
-                            m_sourceTooltip.Parse( fileName, worker, view );
-                            if( !m_sourceTooltip.empty() )
-                            {
-                                ImGui::Separator();
-                                SetFont();
-                                PrintSourceFragment( m_sourceTooltip, srcline );
-                                UnsetFont();
-                            }
+                            ImGui::Separator();
+                            SetFont();
+                            PrintSourceFragment( m_sourceTooltip, srcline );
+                            UnsetFont();
                         }
                     }
                 }
@@ -5811,11 +6073,18 @@ void SourceView::Save( const Worker& worker, size_t start, size_t stop )
             }
             uint32_t srcline;
             const auto srcidx = worker.GetLocationForAddress( v.addr, srcline );
-            if( srcline != 0 && psz > 0 )
+            if( srcidx.Active() && psz > 0 )
             {
                 int spaces = std::max( m_maxMnemonicLen + m_maxOperandLen - psz, 0 ) + 1;
                 while( spaces-- ) fputc( ' ', f );
-                fprintf( f, "# %s:%i\n", worker.GetString( srcidx ), srcline );
+                if( srcline != 0 )
+                {
+                    fprintf( f, "# %s:%i\n", worker.GetString( srcidx ), srcline );
+                }
+                else
+                {
+                    fprintf( f, "# %s\n", worker.GetString( srcidx ) );
+                }
             }
             else
             {

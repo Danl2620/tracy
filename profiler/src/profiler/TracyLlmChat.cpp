@@ -5,8 +5,11 @@
 #include <string>
 
 #include "TracyImGui.hpp"
+#include "TracyLlm.hpp"
 #include "TracyLlmChat.hpp"
 #include "TracyMouse.hpp"
+#include "TracyPrint.hpp"
+#include "TracyView.hpp"
 #include "../Fonts.hpp"
 #include "../../public/common/TracyForceInline.hpp"
 
@@ -67,14 +70,95 @@ static const char* utfendl( const char* str, int len )
 }
 
 
-TracyLlmChat::TracyLlmChat()
+std::string TracyLlmChat::ToolCallDescription( const nlohmann::json& json ) const
+{
+    if( !json.contains( "arguments" ) ) return "";
+    nlohmann::json args;
+    try
+    {
+        args = nlohmann::json::parse( json["arguments"].get_ref<const std::string&>() );
+    }
+    catch( nlohmann::json::exception& )
+    {
+        return "";
+    }
+
+    auto& name = json["name"].get_ref<const std::string&>();
+    if( name == "search_wikipedia" )
+    {
+        if( !args.contains( "query" ) || !args.contains( "language" ) ) return "";
+        return "Search Wikipedia (" + args["language"].get_ref<const std::string&>() + "): " + args["query"].get_ref<const std::string&>();
+    }
+    else if( name == "get_wikipedia" )
+    {
+        if( !args.contains( "page" ) || !args.contains( "language" ) ) return "";
+        return "Wikipedia (" + args["language"].get_ref<const std::string&>() + "): " + args["page"].get_ref<const std::string&>();
+    }
+    else if( name == "get_dictionary" )
+    {
+        if( !args.contains( "word" ) || !args.contains( "language" ) ) return "";
+        return "Dictionary (" + args["language"].get_ref<const std::string&>() + "): " + args["word"].get_ref<const std::string&>();
+    }
+    else if( name == "search_web" )
+    {
+        if( !args.contains( "query" ) ) return "";
+        return "Search web: " + args["query"].get_ref<const std::string&>();
+    }
+    else if( name == "get_webpage" )
+    {
+        if( !args.contains( "url" ) ) return "";
+        return "Get webpage: " + args["url"].get_ref<const std::string&>();
+    }
+    else if( name == "user_manual" )
+    {
+        if( !args.contains( "query" ) ) return "";
+        return "User manual: " + args["query"].get_ref<const std::string&>();
+    }
+    else if( name == "source_file" )
+    {
+        if( !args.contains( "file" ) || !args.contains( "line" ) ) return "";
+        uint32_t ctx = args.contains( "context" ) ? args["context"].get<uint32_t>() : 2;
+        uint32_t ctxBack = args.contains( "context_back" ) ? args["context_back"].get<uint32_t>() : 2;
+        return "Source file: " + args["file"].get_ref<const std::string&>() + ":" + std::to_string( args["line"].get<uint32_t>() ) + " (+" + std::to_string( ctx ) + ", -" + std::to_string( ctxBack ) + ")";
+    }
+    else if( name == "source_search" )
+    {
+        if( !args.contains( "query" ) ) return "";
+        std::string caseInsensitive, path;
+        if( args.contains( "case_insensitive" ) && args["case_insensitive"].get<bool>() ) caseInsensitive = " (case insensitive)";
+        if( args.contains( "path" ) ) path = ", path: " + args["path"].get_ref<const std::string&>();
+        return "Source search: " + args["query"].get_ref<const std::string&>() + caseInsensitive + path;
+    }
+    else if( name == "skill" )
+    {
+        if( !args.contains( "name" ) ) return "";
+        auto skill = args["name"].get_ref<const std::string&>();
+        auto it = std::ranges::find_if( m_skills, [&skill]( const auto& s ) { return s.name == skill; } );
+        if( it == m_skills.end() ) return "";
+        return "Learn skill: " + it->description;
+    }
+    return "";
+}
+
+
+TracyLlmChat::TracyLlmChat( View& view, Worker& worker, const std::vector<LlmSkill>& skills )
     : m_width( new float[NumRoles] )
+    , m_markdown( &view, &worker )
+    , m_skills( skills )
+    , m_view( view )
 {
 }
 
 TracyLlmChat::~TracyLlmChat()
 {
     delete[] m_width;
+}
+
+void TracyLlmChat::SetModelTimeLabel( const char* model, uint64_t duration_ns )
+{
+    char buf[128];
+    snprintf( buf, sizeof( buf ), "%s  »  %s", model, TimeToString( duration_ns ) );
+    m_label = buf;
 }
 
 void TracyLlmChat::Begin()
@@ -92,20 +176,32 @@ void TracyLlmChat::Begin()
     m_thinkOpen = false;
     m_thinkIdx = 0;
     m_roleIdx = 0;
+    m_label.clear();
 }
 
 void TracyLlmChat::End()
 {
     if( m_role != TurnRole::None )
     {
+        if( m_role == TurnRole::Assistant && !m_label.empty() )
+        {
+            ImGui::Spacing();
+            ImGui::PushFont( g_fonts.normal, FontSmall );
+            ImGui::TextDisabled( "%s", m_label.c_str() );
+            ImGui::PopFont();
+            m_label.clear();
+        }
         NormalScope();
         ImGui::EndGroup();
         ImGui::PopID();
     }
 }
 
-bool TracyLlmChat::Turn( TurnRole role, const nlohmann::json& json, Think think, bool last )
+bool TracyLlmChat::Turn( TurnRole role, std::vector<nlohmann::json>::iterator it, const std::vector<nlohmann::json>::iterator& end, Think think, bool last )
 {
+    auto& json = *it;
+    if( json.contains( "role" ) && json["role"].get_ref<const std::string&>() == "tool" ) return true;
+
     bool keep = true;
     const auto& roleData = roles[(int)role];
     const bool roleChange = role != m_role;
@@ -113,6 +209,14 @@ bool TracyLlmChat::Turn( TurnRole role, const nlohmann::json& json, Think think,
     {
         if( m_role != TurnRole::None )
         {
+            if( m_role == TurnRole::Assistant && !m_label.empty() )
+            {
+                ImGui::Spacing();
+                ImGui::PushFont( g_fonts.normal, FontSmall );
+                ImGui::TextDisabled( "%s", m_label.c_str() );
+                ImGui::PopFont();
+                m_label.clear();
+            }
             NormalScope();
             ImGui::EndGroup();
             ImGui::PopID();
@@ -141,7 +245,7 @@ bool TracyLlmChat::Turn( TurnRole role, const nlohmann::json& json, Think think,
         {
             const auto& trash = roles[trashIdx];
             ImGui::TextColored( trash.iconColor, "%s", trash.icon );
-            if( IsMouseClicked( ImGuiMouseButton_Left ) ) keep = false;
+            if( IsMouseClicked( ImGuiMouseButton_Left ) && ImGui::IsWindowHovered() ) keep = false;
         }
         else
         {
@@ -183,10 +287,24 @@ bool TracyLlmChat::Turn( TurnRole role, const nlohmann::json& json, Think think,
             const bool expand = ImGui::TreeNode( "Attachment" );
             ImGui::SameLine();
             ImGui::TextDisabled( "(%s)", type.c_str() );
+            if( type == "callstack" )
+            {
+                if( j.contains( "id" ) )
+                {
+                    const auto id = j["id"].get<int64_t>();
+                    assert( id >= 0 );
+                    const auto thread = j.contains( "thread_id" ) ? j["thread_id"].get<uint32_t>() : 0;
+                    ImGui::SameLine();
+                    if( ImGui::SmallButton( ICON_FA_EYE ) )
+                    {
+                        m_view.ViewCallstack( id, thread );
+                    }
+                }
+            }
             if( expand )
             {
                 ImGui::PushFont( g_fonts.mono, FontNormal );
-                ImGui::TextWrapped( "%s", content.c_str() + tagSize );
+                ImGui::TextWrapped( "%s", j.dump( 2 ).c_str() );
                 ImGui::PopFont();
                 ImGui::TreePop();
             }
@@ -232,64 +350,116 @@ bool TracyLlmChat::Turn( TurnRole role, const nlohmann::json& json, Think think,
         }
         if( json.contains( "content" ) )
         {
-            auto& content = json["content"].get_ref<const std::string&>();
             auto& roleStr = json["role"].get_ref<const std::string&>();
-            if( roleStr == "tool" )
+            assert( roleStr != "tool" );
+            auto& content = json["content"].get_ref<const std::string&>();
+            if( !content.empty() )
             {
-                if( think == Think::Show )
-                {
-                    ThinkScope( !roleChange );
-                    if( m_thinkOpen )
-                    {
-                        ImGui::PushStyleColor( ImGuiCol_Text, ImVec4( 0.5f, 0.5f, 0.5f, 1.f ) );
-                        if( content == ForgetMsg )
-                        {
-                            ImGui::TextUnformatted( ICON_FA_RECYCLE " Tool response removed to save context space" );
-                        }
-                        else
-                        {
-                            auto& name = json["name"].get_ref<const std::string&>();
-                            auto& id = json["tool_call_id"].get_ref<const std::string&>();
-                            char buf[1024];
-                            snprintf( buf, sizeof( buf ), ICON_FA_REPLY " Tool response (%s/%s)…", name.c_str(), id.substr( 0, 8 ).c_str() );
-                            if( ImGui::TreeNode( buf ) )
-                            {
-                                std::string parsed;
-                                try
-                                {
-                                    parsed = nlohmann::json::parse( content.c_str() ).dump( 2 );
-                                }
-                                catch( nlohmann::json::exception& )
-                                {
-                                    parsed = content;
-                                }
-                                ImGui::PushFont( g_fonts.mono, FontNormal );
-                                ImGui::TextWrapped( "%s", parsed.c_str() );
-                                ImGui::PopFont();
-                                ImGui::TreePop();
-                            }
-                        }
-                        ImGui::PopStyleColor();
-                    }
-                }
-            }
-            else
-            {
-                if( !content.empty() )
+                auto ptr = content.c_str();
+                auto end = ptr + content.size();
+                while( *ptr == '\n' ) ptr++;
+                if( ptr != end )
                 {
                     NormalScope();
                     m_markdown.Print( content.c_str(), content.size() );
-                    if( !last && think == Think::Hide && roleStr == "assistant" ) ImGui::Spacing();
+                    if( roleStr == "assistant" ) ImGui::Spacing();
                 }
             }
         }
         if( think != Think::Hide && json.contains( "tool_calls" ) )
         {
-            ThinkScope( !roleChange || json.contains( "content" ) );
+            ThinkScope( !roleChange && !json.contains( "content" ) );
             if( m_thinkOpen )
             {
-                auto calls = json["tool_calls"].dump( 2 );
-                PrintToolCall( calls.c_str(), calls.size() );
+                ImGui::PushStyleColor( ImGuiCol_Text, ImVec4( 0.5f, 0.5f, 0.5f, 1.f ) );
+                if( json.contains( "reasoning_content" ) ) ImGui::Spacing();
+                bool first = true;
+                for( auto& call : json["tool_calls"] )
+                {
+                    if( call.contains( "id" ) && call.contains( "function" ) )
+                    {
+                        auto& id = call["id"].get_ref<const std::string&>();
+                        auto& function = call["function"];
+                        if( function.contains( "name" ) )
+                        {
+                            if( first ) first = false;
+                            else ImGui::Spacing();
+
+                            std::string tmp = "##" + id;
+                            auto open = ImGui::TreeNodeEx( tmp.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth );
+                            ImGui::SameLine();
+                            const auto desc = ToolCallDescription( function );
+                            if( desc.empty() )
+                            {
+                                auto& name = function["name"].get_ref<const std::string&>();
+                                ImGui::Text( "Tool call (%s/%s)…", name.c_str(), id.substr( 0, 8 ).c_str() );
+                            }
+                            else
+                            {
+                                ImGui::TextUnformatted( desc.c_str() );
+                            }
+                            if( open )
+                            {
+                                if( desc.empty() && function.contains( "arguments" ) )
+                                {
+                                    try
+                                    {
+                                        auto args = nlohmann::json::parse( function["arguments"].get_ref<const std::string&>() );
+                                        if( !args.empty() )
+                                        {
+                                            ImGui::Indent();
+                                            for( auto& [key, value] : args.items() )
+                                            {
+                                                ImGui::Text( "%s: %s", key.c_str(), value.dump().c_str() );
+                                            }
+                                            ImGui::Unindent();
+                                        }
+                                    }
+                                    catch( nlohmann::json::exception& )
+                                    {
+                                        ImGui::Indent();
+                                        ImGui::TextWrapped( "%s", function["arguments"].get_ref<const std::string&>().c_str() );
+                                        ImGui::Unindent();
+                                    }
+                                }
+
+                                for( auto result = it+1; result != end; result++ )
+                                {
+                                    auto& rjson = *result;
+                                    if( !rjson.contains( "role" ) || rjson["role"].get_ref<const std::string&>() != "tool" ) continue;
+                                    if( id != rjson["tool_call_id"].get_ref<const std::string&>() ) continue;
+                                    if( !rjson.contains( "content" ) ) continue;
+                                    auto& content = rjson["content"].get_ref<const std::string&>();
+                                    if( content.empty() ) continue;
+
+                                    if( content == ForgetMsg )
+                                    {
+                                        ImGui::TextUnformatted( ICON_FA_RECYCLE " Tool response removed to save context space" );
+                                    }
+                                    else
+                                    {
+                                        std::string parsed;
+                                        try
+                                        {
+                                            parsed = nlohmann::json::parse( content.c_str() ).dump( 2 );
+                                        }
+                                        catch( nlohmann::json::exception& )
+                                        {
+                                            parsed = content;
+                                        }
+                                        ImGui::PushFont( g_fonts.mono, FontNormal );
+                                        ImGui::TextWrapped( "%s", parsed.c_str() );
+                                        ImGui::PopFont();
+                                    }
+                                    break;
+                                }
+
+                                ImGui::TreePop();
+                            }
+                        }
+                    }
+                }
+                ImGui::PopStyleColor();
             }
         }
     }
@@ -345,15 +515,6 @@ void TracyLlmChat::PrintThink( const char* str, size_t size )
 {
     ImGui::PushStyleColor( ImGuiCol_Text, ThinkColor );
     m_markdown.Print( str, size );
-    ImGui::PopStyleColor();
-}
-
-void TracyLlmChat::PrintToolCall( const char* str, size_t size )
-{
-    ImGui::PushStyleColor( ImGuiCol_Text, ImVec4( 0.5f, 0.5f, 0.5f, 1.f ) );
-    ImGui::PushFont( g_fonts.mono, FontNormal );
-    ImGui::TextWrapped( "%.*s", (int)size, str );
-    ImGui::PopFont();
     ImGui::PopStyleColor();
 }
 

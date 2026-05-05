@@ -18,6 +18,7 @@
 #include "TracyBuzzAnim.hpp"
 #include "TracyConfig.hpp"
 #include "TracyDecayValue.hpp"
+#include "TracyManualData.hpp"
 #include "TracyMarkdown.hpp"
 #include "TracySourceContents.hpp"
 #include "TracyTimelineController.hpp"
@@ -64,7 +65,6 @@ struct CpuCtxDraw;
 struct LockDraw;
 struct PlotDraw;
 struct FlameGraphContext;
-class TracyManualData;
 
 
 class View
@@ -138,6 +138,9 @@ public:
     void ViewSymbol( const char* fileName, int line, uint64_t baseAddr, uint64_t symAddr );
     bool ViewDispatch( const char* fileName, int line, uint64_t symAddr );
 
+    const TracyManualData::ManualChunk* GetManualChunk( const char* anchor ) const;
+    bool ViewManualChunk( const char* anchor );
+
     bool ReconnectRequested() const { return m_reconnectRequested; }
     std::string GetAddress() const { return m_worker.GetAddr(); }
     uint16_t GetPort() const { return m_worker.GetPort(); }
@@ -165,7 +168,7 @@ public:
 
     void HighlightThread( uint64_t thread );
     void SelectThread( uint64_t thread );
-    uint64_t GetSelectThread() { return m_selectedThread; }
+    uint64_t GetSelectThread() const { return m_selectedThread; }
     void ZoomToRange( int64_t start, int64_t end, bool pause = true );
     bool DrawPlot( const TimelineContext& ctx, PlotData& plot, const std::vector<uint32_t>& plotDraw, int& offset, bool rightEnd );
     void DrawThread( const TimelineContext& ctx, const ThreadData& thread, const std::vector<TimelineDraw>& draw, const std::vector<ContextSwitchDraw>& ctxDraw, const std::vector<SamplesDraw>& samplesDraw, const std::vector<std::unique_ptr<LockDraw>>& lockDraw, int& offset, int depth, bool hasCtxSwitches, bool hasSamples );
@@ -174,11 +177,14 @@ public:
     bool DrawGpu( const TimelineContext& ctx, const GpuCtxData& gpu, int& offset );
     bool DrawCpuData( const TimelineContext& ctx, const std::vector<CpuUsageDraw>& cpuDraw, const std::vector<std::vector<CpuCtxDraw>>& ctxDraw, int& offset, bool hasCpuData );
     void DrawThreadMigrations( const TimelineContext& ctx, const int origOffset, uint64_t thread );
+    void DrawSourceTooltip( const char* filename, uint32_t line, int before = 3, int after = 3, bool separateTooltip = true );
 
     bool IsBackgroundDone() const { return m_worker.IsBackgroundDone(); }
 
     void AddLlmAttachment( const nlohmann::json& json );
     void AddLlmQuery( const char* query );
+
+    void ViewCallstack( uint32_t callstack, uint32_t thread );
 
     bool m_showRanges = false;
     Range m_statRange;
@@ -192,7 +198,7 @@ private:
         OpenFind
     };
 
-    enum { InvalidId = 0xFFFFFFFF };
+    static constexpr uint32_t InvalidId = 0xFFFFFFFF;
 
     struct MemPathData
     {
@@ -248,6 +254,12 @@ private:
         uint32_t count;
     };
 
+    struct CallstackView
+    {
+        uint32_t id;
+        uint64_t thread;
+    };
+
     void InitTextEditor();
     void SetupConfig();
     void Achieve( const char* id );
@@ -260,7 +272,7 @@ private:
     void DrawTimelineFramesHeader();
     void DrawTimelineFrames( const FrameData& frames );
     void DrawTimeline();
-    void DrawSampleList( const TimelineContext& ctx, const std::vector<SamplesDraw>& drawList, const Vector<SampleData>& vec, int offset );
+    void DrawSampleList( const TimelineContext& ctx, const std::vector<SamplesDraw>& drawList, const Vector<SampleData>& vec, int offset, uint64_t tid );
     void DrawZoneList( const TimelineContext& ctx, const std::vector<TimelineDraw>& drawList, int offset, uint64_t tid, int maxDepth, double margin );
     void DrawThreadCropper( const int depth, const uint64_t tid, const float xPos, const float yPos, const float ostep, const float cropperWidth, const bool hasCtxSwitches );
     void DrawContextSwitchList( const TimelineContext& ctx, const std::vector<ContextSwitchDraw>& drawList, const Vector<ContextSwitchData>& ctxSwitch, int offset, int endOffset, bool isFiber );
@@ -284,7 +296,8 @@ private:
     void DrawAllocList();
     void DrawCompare();
     void DrawCallstackWindow();
-    void DrawCallstackTable( uint32_t callstack, bool globalEntriesButton );
+    void DrawCallstackTable( uint32_t callstack, uint64_t thread, bool globalEntriesButton, bool showThread );
+    void DrawCallstackTable( const CallstackFrameId* data, size_t size, uint64_t thread, bool globalEntriesButton, bool showThread, bool hasCrashed = false, int64_t callstack = -1 );
     void DrawMemoryAllocWindow();
     void DrawInfo();
     void DrawTextEditor();
@@ -296,7 +309,6 @@ private:
     void DrawSampleParents();
     void DrawRanges();
     void DrawRangeEntry( Range& range, const char* label, uint32_t color, const char* popupLabel, int id );
-    void DrawSourceTooltip( const char* filename, uint32_t line, int before = 3, int after = 3, bool separateTooltip = true );
     void DrawWaitStacks();
     void DrawManual();
     void DrawFlameGraph();
@@ -323,6 +335,8 @@ private:
     unordered_flat_map<uint64_t, CallstackFrameTree> GetParentsCallstackFrameTreeTopDown( const unordered_flat_map<uint32_t, uint32_t>& stacks, bool group ) const;
     void DrawParentsFrameTreeLevel( const unordered_flat_map<uint64_t, CallstackFrameTree>& tree, int& idx );
 
+    std::vector<CallstackFrameId> ReconstructZoneCallstack( const ZoneEvent& ev ) const;
+
     void DrawInfoWindow();
     void DrawZoneInfoWindow();
     void DrawGpuInfoWindow();
@@ -338,7 +352,6 @@ private:
 
     void AddAnnotation( int64_t start, int64_t end );
 
-    bool IsFrameExternal( const char* filename, const char* image ) const;
     uint32_t GetThreadColor( uint64_t thread, int depth );
     uint32_t GetSrcLocColor( const SourceLocation& srcloc, int depth );
     uint32_t GetRawSrcLocColor( const SourceLocation& srcloc, int depth );
@@ -386,8 +399,10 @@ private:
 
     std::vector<MemoryPage> GetMemoryPages() const;
 
-    void SmallCallstackButton( const char* name, uint32_t callstack, int& idx, bool tooltip = true );
+    void SmallCallstackButton( const char* name, uint32_t callstack, int& idx, uint64_t tid, bool tooltip = true );
     void DrawCallstackCalls( uint32_t callstack, uint16_t limit ) const;
+    void DrawCallstackCalls( const CallstackFrameId* data, size_t size, uint16_t limit ) const;
+    nlohmann::json GetCallstackJson( const CallstackFrameId* data, size_t size ) const;
     void SetViewToLastFrames();
     int64_t GetZoneChildTime( const ZoneEvent& zone );
     int64_t GetZoneChildTime( const GpuEvent& zone );
@@ -492,7 +507,7 @@ private:
     const GpuEvent* m_gpuInfoWindow = nullptr;
     const GpuEvent* m_gpuHighlight;
     uint64_t m_gpuInfoWindowThread;
-    uint32_t m_callstackInfoWindow = 0;
+    CallstackView m_callstackView = {};
     int64_t m_memoryAllocInfoWindow = -1;
     uint64_t m_memoryAllocInfoPool = 0;
     int64_t m_memoryAllocHover = -1;
@@ -566,6 +581,7 @@ private:
     bool m_showWaitStacks = false;
     bool m_showFlameGraph = false;
     bool m_showManual = false;
+    bool m_manualPositionReset = false;
 
     AccumulationMode m_statAccumulationMode = AccumulationMode::SelfOnly;
     bool m_statSampleTime = true;
@@ -574,20 +590,20 @@ private:
     int m_flameMode = 0;
     bool m_flameSort = false;
     bool m_flameRunningTime = false;
-    bool m_flameExternal = true;
+    bool m_flameExternal = false;
     bool m_flameExternalTail = true;
     int m_statSampleLocation = 2;
     bool m_statHideUnknown = true;
     bool m_showAllSymbols = false;
     int m_showCallstackFrameAddress = 0;
-    bool m_showExternalFrames = true;
-    bool m_showUnknownFrames = true;
+    bool m_showExternalFrames = false;
     bool m_statSeparateInlines = false;
     bool m_mergeInlines = false;
     bool m_relativeInlines = false;
     bool m_topInline = false;
     bool m_statShowAddress = false;
     bool m_statShowKernel = true;
+    bool m_statShowExternal = false;
     bool m_groupChildrenLocations = false;
     bool m_allocTimeRelativeToZone = true;
     bool m_ctxSwitchTimeRelativeToZone = true;
@@ -657,7 +673,7 @@ private:
     std::vector<std::unique_ptr<Annotation>> m_annotations;
     UserData m_userData;
 
-    bool m_wasActive = false;
+    alignas(64) std::atomic<bool> m_wasActive { false };
     bool m_reconnectRequested = false;
     bool m_firstFrame = true;
     std::chrono::time_point<std::chrono::high_resolution_clock> m_firstFrameTime;
@@ -680,7 +696,7 @@ private:
     int m_gpuIdx = 0;
 
     struct FindZone {
-        enum : uint64_t { Unselected = std::numeric_limits<uint64_t>::max() - 1 };
+        static constexpr uint64_t Unselected = std::numeric_limits<uint64_t>::max() - 1;
         enum class GroupBy : int { Thread, UserText, ZoneName, Callstack, Parent, NoGrouping };
         enum class SortBy : int { Order, Count, Time, Mtpc };
 
@@ -972,7 +988,7 @@ private:
     {
         uint64_t count = 0;
         uint64_t lastTime = 0;
-        RangeSlim range = {false, 0, 0};
+        RangeSlim range = {0, 0, false};
 
         void Reset()
         {
@@ -983,6 +999,9 @@ private:
 
 #ifndef __EMSCRIPTEN__
     TracyLlm m_llm;
+
+    unordered_flat_map<uint32_t, std::string> m_callstackDesc;
+    std::mutex m_callstackDescLock;
 #endif
 };
 

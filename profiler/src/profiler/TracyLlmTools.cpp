@@ -7,8 +7,10 @@
 #include <tidy.h>
 #include <tidybuffio.h>
 #include <time.h>
+#include <regex>
 
 #include "TracyConfig.hpp"
+#include "TracyLlm.hpp"
 #include "TracyLlmApi.hpp"
 #include "TracyLlmTools.hpp"
 #include "TracyManualData.hpp"
@@ -16,10 +18,9 @@
 #include "TracyUtility.hpp"
 #include "TracyWorker.hpp"
 
-constexpr const char* NoNetworkAccess = "Internet access is disabled by the user. You may inform the user that he can enable it in the settings, so that you can use the tools to gather information.";
+constexpr const char* NoNetworkAccess = "Internet access is disabled by the user. Inform the user that they may enable it in the settings, so that you can use the tools to gather information.";
 
-#define NetworkCheckString if( !m_netAccess ) return NoNetworkAccess
-#define NetworkCheckReply if( !m_netAccess ) return { .reply = NoNetworkAccess }
+#define NetworkCheck if( !m_netAccess ) return NoNetworkAccess
 
 namespace tracy
 {
@@ -78,9 +79,10 @@ static std::unique_ptr<pugi::xml_document> ParseHtml( const std::string& html )
     return doc;
 }
 
-TracyLlmTools::TracyLlmTools( Worker& worker, const TracyManualData& manual )
+TracyLlmTools::TracyLlmTools( Worker& worker, const TracyManualData& manual, const std::vector<LlmSkill>& skills )
     : m_worker( worker )
     , m_manual( manual )
+    , m_skills( skills )
 {
     int idx = 0;
     for( auto& chunk : m_manual.GetChunks() )
@@ -109,22 +111,41 @@ TracyLlmTools::~TracyLlmTools()
     CancelManualEmbeddings();
 }
 
-static const std::string& GetParam( const nlohmann::json& json, const char* name )
+template<typename T>
+static T GetParam( const nlohmann::json& json, const char* name )
 {
     if( !json.contains( name ) ) throw std::runtime_error( "Error: missing parameter: " + std::string( name ) );
-    return json[name].get_ref<const std::string&>();
+    if constexpr( std::is_reference_v<T> )
+    {
+        return json[name].get_ref<T>();
+    }
+    else
+    {
+        return json[name].get<T>();
+    }
 }
 
-static uint32_t GetParamU32( const nlohmann::json& json, const char* name )
+template<typename T>
+static T GetParamOpt( const nlohmann::json& json, const char* name, T def )
 {
-    if( !json.contains( name ) ) throw std::runtime_error( "Error: missing parameter: " + std::string( name ) );
-    return json[name].get<uint32_t>();
+    if( !json.contains( name ) ) return def;
+    if constexpr( std::is_reference_v<T> )
+    {
+        return json[name].get_ref<T>();
+    }
+    else
+    {
+        return json[name].get<T>();
+    }
 }
 
-#define Param(name) GetParam( json, name )
-#define ParamU32(name) GetParamU32( json, name )
+#define Param(name) GetParam<const std::string&>( json, name )
+#define ParamU32(name) GetParam<uint32_t>( json, name )
+#define ParamOptU32(name, def) GetParamOpt<uint32_t>( json, name, def )
+#define ParamOptBool(name, def) GetParamOpt<bool>( json, name, def )
+#define ParamOptString(name, def) GetParamOpt<const std::string&>( json, name, def )
 
-TracyLlmTools::ToolReply TracyLlmTools::HandleToolCalls( const std::string& tool, const nlohmann::json& json, TracyLlmApi& api, int contextSize, bool hasEmbeddingsModel )
+std::string TracyLlmTools::HandleToolCalls( const std::string& tool, const nlohmann::json& json, TracyLlmApi& api, int contextSize, bool hasEmbeddingsModel )
 {
     m_ctxSize = contextSize;
 
@@ -136,33 +157,42 @@ TracyLlmTools::ToolReply TracyLlmTools::HandleToolCalls( const std::string& tool
         }
         else if( tool == "get_wikipedia" )
         {
-            return { .reply = GetWikipedia( Param( "page" ), Param( "language" ) ) };
+            return GetWikipedia( Param( "page" ), Param( "language" ) );
         }
         else if( tool == "get_dictionary" )
         {
-            return { .reply = GetDictionary( Param( "word" ), Param( "language" ) ) };
+            return GetDictionary( Param( "word" ), Param( "language" ) );
         }
         else if( tool == "search_web" )
         {
-            return { .reply = SearchWeb( Param( "query" ) ) };
+            return SearchWeb( Param( "query" ) );
         }
         else if( tool == "get_webpage" )
         {
-            return { .reply = GetWebpage( Param( "url" ) ) };
+            return GetWebpage( Param( "url" ) );
         }
         else if( tool == "user_manual" )
         {
-            return { .reply = SearchManual( Param( "query" ), api, hasEmbeddingsModel ) };
+            return SearchManual( Param( "query" ), api, hasEmbeddingsModel );
         }
         else if( tool == "source_file" )
         {
-            return { .reply = SourceFile( Param( "file" ), ParamU32( "line" ) ) };
+            return SourceFile( Param( "file" ), ParamU32( "line" ), ParamOptU32( "context", 2 ), ParamOptU32( "context_back", 2 ) );
         }
-        return { .reply = "Unknown tool call: " + tool };
+        else if( tool == "source_search" )
+        {
+            std::string empty;
+            return SourceSearch( Param( "query" ), ParamOptBool( "case_insensitive", false ), ParamOptString( "path", empty ) );
+        }
+        else if( tool == "skill" )
+        {
+            return GetSkill( Param( "name" ) );
+        }
+        return "Unknown tool call: " + tool;
     }
     catch( const std::exception& e )
     {
-        return { .reply = e.what() };
+        return e.what();
     }
 }
 
@@ -315,14 +345,22 @@ void TracyLlmTools::CancelManualEmbeddings()
     }
 }
 
-int TracyLlmTools::CalcMaxSize() const
+int TracyLlmTools::CalcCtxBasedLimit( int ctxSize )
 {
-    if( m_ctxSize <= 0 ) return 32*1024;
+    if( ctxSize <= 0 ) return 0;
 
     // Limit the size of the response to avoid exceeding the context size
-    // Assume average token size is 4 bytes. Make space for 3 articles to be retrieved.
-    const auto maxSize = ( m_ctxSize * 4 ) / 3;
-    return maxSize;
+    // Assume average token size is 4 bytes. Make space for 8 articles to be retrieved.
+    return ( ctxSize * 4 ) / 8;
+}
+
+int TracyLlmTools::CalcMaxSize() const
+{
+    constexpr int defaultLimit = 48*1024;
+    const int limit = s_config.llmLimitToolReplySize ? s_config.llmMaxToolReplySizeValue : defaultLimit;
+    const int ctxLimit = CalcCtxBasedLimit( m_ctxSize );
+    if( ctxLimit <= 0 ) return limit;
+    return std::min( ctxLimit, limit );
 }
 
 std::string TracyLlmTools::TrimString( std::string&& str ) const
@@ -351,7 +389,7 @@ static size_t WriteFn( void* _data, size_t size, size_t num, void* ptr )
     return sz;
 }
 
-std::string TracyLlmTools::FetchWebPage( const std::string& url, bool cache )
+std::string TracyLlmTools::FetchHttp( const std::string& url, const std::vector<const char*>& headers, bool cache )
 {
     auto it = m_webCache.find( url );
     if( it != m_webCache.end() ) return it->second;
@@ -370,7 +408,12 @@ std::string TracyLlmTools::FetchWebPage( const std::string& url, bool cache )
     curl_easy_setopt( curl, CURLOPT_WRITEDATA, &buf );
     curl_easy_setopt( curl, CURLOPT_USERAGENT, s_config.llmUserAgent.c_str() );
 
+    struct curl_slist* headerList = nullptr;
+    for( auto& hdr : headers ) headerList = curl_slist_append( headerList, hdr );
+    if( headerList ) curl_easy_setopt( curl, CURLOPT_HTTPHEADER, headerList );
+
     auto res = curl_easy_perform( curl );
+    if( headerList ) curl_slist_free_all( headerList );
 
     std::string response;
     if( res != CURLE_OK )
@@ -396,75 +439,58 @@ std::string TracyLlmTools::FetchWebPage( const std::string& url, bool cache )
     return response;
 }
 
-TracyLlmTools::ToolReply TracyLlmTools::SearchWikipedia( std::string query, const std::string& lang )
+std::string TracyLlmTools::SearchWikipedia( std::string query, const std::string& lang )
 {
-    NetworkCheckReply;
+    NetworkCheck;
 
     std::ranges::replace( query, ' ', '+' );
-    const auto response = FetchWebPage( "https://" + lang + ".wikipedia.org/w/rest.php/v1/search/page?q=" + UrlEncode( query ) + "&limit=1" );
+    const auto response = FetchHttp( "https://" + lang + ".wikipedia.org/w/rest.php/v1/search/page?q=" + UrlEncode( query ) + "&limit=10" );
 
     auto json = nlohmann::json::parse( response );
-    if( !json.contains( "pages" ) ) return { .reply = "No results found" };
+    if( !json.contains( "pages" ) ) return "No results found";
 
-    auto& page = json["pages"];
-    if( page.size() == 0 ) return { .reply = "No results found" };
+    auto& pages = json["pages"];
+    if( pages.size() == 0 ) return "No results found";
 
-    auto& page0 = page[0];
-    if( !page0.contains( "key" ) ) return { .reply = "No results found" };
-
-    const auto key = page0["key"].get_ref<const std::string&>();
-
-    auto summary = FetchWebPage( "https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + key );
-    auto summaryJson = nlohmann::json::parse( summary );
-
-    if( !summaryJson.contains( "title" ) ) return { .reply = "No results found" };
-
-    nlohmann::json output;
-    output["key"] = key;
-    output["title"] = summaryJson["title"];
-    if( summaryJson.contains( "description" ) ) output["description"] = summaryJson["description"];
-    output["preview"] = summaryJson["extract"];
-
-    std::string image;
-    if( summaryJson.contains( "thumbnail" ) )
+    auto output = nlohmann::json::array();
+    for( auto& page : pages )
     {
-        auto& thumb = summaryJson["thumbnail"];
-        if( thumb.contains( "source" ) )
-        {
-            auto imgData = FetchWebPage( thumb["source"].get_ref<const std::string&>() );
-            if( !imgData.empty() && imgData[0] != '<' && strncmp( imgData.c_str(), "Error:", 6 ) != 0 )
-            {
-                size_t b64sz = ( ( 4 * imgData.size() / 3 ) + 3 ) & ~3;
-                char* b64 = new char[b64sz+1];
-                b64[b64sz] = 0;
-                size_t outSz;
-                base64_encode( (const char*)imgData.data(), imgData.size(), b64, &outSz, 0 );
-                image = std::string( b64, outSz );
-                delete[] b64;
-            }
-        }
+        if( !page.contains( "key" ) ) continue;
+
+        const auto key = page["key"].get_ref<const std::string&>();
+
+        auto summary = FetchHttp( "https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + key );
+        auto summaryJson = nlohmann::json::parse( summary );
+
+        nlohmann::json j = {
+            { "key", key },
+            { "title", page["title"] },
+            { "preview", summaryJson["extract"] },
+            { "excerpt", page["excerpt"] }
+        };
+        if( page.contains( "description" ) && !page["description"].is_null() ) j["description"] = page["description"];
+        output.push_back( j );
     }
 
-    const auto reply = output.dump( 2, ' ', false, nlohmann::json::error_handler_t::replace );
-    return { .reply = reply, .image = image };
+    return output.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
 }
 
 std::string TracyLlmTools::GetWikipedia( std::string page, const std::string& lang )
 {
-    NetworkCheckString;
+    NetworkCheck;
 
     std::ranges::replace( page, ' ', '_' );
-    auto res = FetchWebPage( "https://" + lang + ".wikipedia.org/w/rest.php/v1/page/" + page );
+    auto res = FetchHttp( "https://" + lang + ".wikipedia.org/w/rest.php/v1/page/" + page );
 
     return TrimString( std::move( res ) );
 }
 
 std::string TracyLlmTools::GetDictionary( std::string word, const std::string& lang )
 {
-    NetworkCheckString;
+    NetworkCheck;
 
     std::ranges::replace( word, ' ', '+' );
-    const auto response = FetchWebPage( "https://" + lang + ".wiktionary.org/w/rest.php/v1/search/page?q=" + UrlEncode( word ) + "&limit=1" );
+    const auto response = FetchHttp( "https://" + lang + ".wiktionary.org/w/rest.php/v1/search/page?q=" + UrlEncode( word ) + "&limit=1" );
 
     auto json = nlohmann::json::parse( response );
     if( !json.contains( "pages" ) ) return "No results found";
@@ -476,49 +502,118 @@ std::string TracyLlmTools::GetDictionary( std::string word, const std::string& l
     if( !page0.contains( "key" ) ) return "No results found";
 
     const auto key = page0["key"].get_ref<const std::string&>();
-    auto res = FetchWebPage( "https://" + lang + ".wiktionary.org/w/rest.php/v1/page/" + key );
+    auto res = FetchHttp( "https://" + lang + ".wiktionary.org/w/rest.php/v1/page/" + key );
 
     return TrimString( std::move( res ) );
 }
 
-static std::string RemoveNewline( std::string str )
+[[nodiscard]] static std::string RemoveNewline( std::string str )
 {
     std::erase( str, '\r' );
     std::ranges::replace( str, '\n', ' ' );
     return str;
 }
 
+static void ReplaceAll( std::string& str, std::string_view from, std::string_view to )
+{
+    std::string::size_type pos = 0;
+    while( ( pos = str.find( from, pos ) ) != std::string::npos )
+    {
+        str.replace( pos, from.size(), to );
+    }
+}
+
 std::string TracyLlmTools::SearchWeb( std::string query )
 {
-    NetworkCheckString;
-
+    NetworkCheck;
     query = UrlEncode( query );
+
+    if( !s_config.llmSearchBraveApiKey.empty() )
+    {
+        const auto result = SearchWebBrave( query );
+        if( !result.starts_with( "Error:" ) && !result.starts_with( "No results" ) ) return result;
+    }
 
     if( !s_config.llmSearchApiKey.empty() && !s_config.llmSearchIdentifier.empty() )
     {
-        const auto response = FetchWebPage( "https://customsearch.googleapis.com/customsearch/v1?key=" + s_config.llmSearchApiKey + "&cx=" + s_config.llmSearchIdentifier + "&q=" + query );
-        try
-        {
-            auto json = nlohmann::json::parse( response );
-            if( json.contains( "items" ) && json["items"].size() != 0 )
-            {
-                nlohmann::json results;
-                for( size_t i = 0; i < json["items"].size(); i++ )
-                {
-                    auto& item = json["items"][i];
-                    nlohmann::json result;
-                    result["title"] = RemoveNewline( item["title"].get_ref<const std::string&>() );
-                    result["preview"] = RemoveNewline( item["snippet"].get_ref<const std::string&>() );
-                    result["url"] = RemoveNewline( item["link"].get_ref<const std::string&>() );
-                    results[i] = result;
-                }
-                return results.dump( 2, ' ', false, nlohmann::json::error_handler_t::replace );
-            }
-        }
-        catch( const nlohmann::json::exception& e ) {}
+        const auto result = SearchWebGoogle( query );
+        if( !result.starts_with( "Error:" ) && !result.starts_with( "No results" ) ) return result;
     }
 
-    const auto response = FetchWebPage( "https://lite.duckduckgo.com/lite?q=" + query );
+    return SearchWebDuckDuckGo( query );
+}
+
+std::string TracyLlmTools::SearchWebGoogle( std::string query )
+{
+    const auto response = FetchHttp( "https://customsearch.googleapis.com/customsearch/v1?key=" + s_config.llmSearchApiKey + "&cx=" + s_config.llmSearchIdentifier + "&q=" + query );
+    try
+    {
+        auto json = nlohmann::json::parse( response );
+        if( json.contains( "items" ) && json["items"].size() != 0 )
+        {
+            nlohmann::json results;
+            for( size_t i = 0; i < json["items"].size(); i++ )
+            {
+                auto& item = json["items"][i];
+                nlohmann::json result;
+                result["title"] = RemoveNewline( item["title"].get_ref<const std::string&>() );
+                result["preview"] = RemoveNewline( item["snippet"].get_ref<const std::string&>() );
+                result["url"] = RemoveNewline( item["link"].get_ref<const std::string&>() );
+                results[i] = result;
+            }
+            return results.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
+        }
+    }
+    catch( const nlohmann::json::exception& e ) {}
+
+    return "Error: Google search failed";
+}
+
+std::string TracyLlmTools::SearchWebBrave( std::string query )
+{
+    const std::string header = "X-Subscription-Token: " + s_config.llmSearchBraveApiKey;
+    const std::vector<const char*> headers = { header.c_str() };
+    const auto response = FetchHttp( "https://api.search.brave.com/res/v1/web/search?q=" + query, headers );
+    try
+    {
+        auto json = nlohmann::json::parse( response );
+        nlohmann::json results;
+
+        auto gatherResults = [&results, &json]( const char* key ) {
+            if( !json.contains( key ) ) return;
+            auto& keyItem = json[key];
+            if( !keyItem.contains( "results" ) ) return;
+            auto& resultsItem = keyItem["results"];
+            if( resultsItem.size() == 0 ) return;
+
+            for( auto& item : resultsItem )
+            {
+                nlohmann::json result;
+                if( item.contains( "age" ) ) result["age"] = RemoveNewline( item["age"].get_ref<const std::string&>() );
+                result["title"] = RemoveNewline( item["title"].get_ref<const std::string&>() );
+                result["preview"] = RemoveNewline( item["description"].get_ref<const std::string&>() );
+                result["url"] = RemoveNewline( item["url"].get_ref<const std::string&>() );
+                results.emplace_back( result );
+            }
+        };
+
+        gatherResults( "web" );
+        gatherResults( "discussions" );
+        gatherResults( "news" );
+        gatherResults( "locations" );
+        gatherResults( "videos" );
+
+        if( !results.empty() ) return results.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
+    }
+    catch( const nlohmann::json::exception& e ) {}
+
+    return "Error: Brave search failed";
+}
+
+std::string TracyLlmTools::SearchWebDuckDuckGo( std::string query )
+{
+    auto response = FetchHttp( "https://lite.duckduckgo.com/lite?q=" + query );
+    if( response.starts_with( "Error:" ) ) return response;
 
     auto doc = ParseHtml( response );
     if( !doc ) return "Error: Failed to parse HTML";
@@ -549,7 +644,7 @@ std::string TracyLlmTools::SearchWeb( std::string query )
         json[i] = result;
     }
 
-    return json.dump( 2, ' ', false, nlohmann::json::error_handler_t::replace );
+    return json.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
 }
 
 static void RemoveTag( pugi::xml_node node, const char* tag )
@@ -615,9 +710,10 @@ struct xml_writer : public pugi::xml_writer
 
 std::string TracyLlmTools::GetWebpage( const std::string& url )
 {
-    NetworkCheckString;
+    NetworkCheck;
 
-    auto data = FetchWebPage( url, false );
+    // Disable caching of raw HTML, we will cache the cleaned up version down below
+    auto data = FetchHttp( url, {}, false );
     auto doc = ParseHtml( data );
     if( !doc ) return "Error: Failed to parse HTML";
 
@@ -682,7 +778,11 @@ std::string TracyLlmTools::GetWebpage( const std::string& url )
     xml_writer writer( response );
     body.node().print( writer, nullptr, pugi::format_raw | pugi::format_no_declaration | pugi::format_no_escapes );
 
-    RemoveNewline( response );
+    response = RemoveNewline( response );
+    ReplaceAll( response, "<div><div>", "<div>" );
+    ReplaceAll( response, "</div></div>", "</div>" );
+    ReplaceAll( response, "<span><span>", "<span>" );
+    ReplaceAll( response, "</span></span>", "</span>" );
     auto it = std::ranges::unique( response, []( char a, char b ) { return ( a == ' ' || a == '\t' ) && ( b == ' ' || b == '\t' ); } );
     response.erase( it.begin(), it.end() );
 
@@ -741,19 +841,24 @@ std::string TracyLlmTools::SearchManual( const std::string& query, TracyLlmApi& 
     for( auto& chunk : chunks )
     {
         auto& m = manualChunks[chunk.first];
-        nlohmann::json r;
-        r["distance"] = chunk.second;
-        r["content"] = m.text;
-        r["section"] = m.section;
-        r["title"] = m.title;
-        r["parents"] = m.parents;
+
+        nlohmann::json r = {
+            { "distance", chunk.second },
+            { "content", m.text },
+            { "parents", m.parents }
+        };
+
+        if( !m.title.empty() ) r["title"] = m.title;
+        if( !m.section.empty() ) r["section"] = m.section;
+        if( !m.link.empty() ) r["link"] = m.link;
+
         json.emplace_back( std::move( r ) );
     }
 
-    return json.dump( 2, ' ', false, nlohmann::json::error_handler_t::replace );
+    return json.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
 }
 
-std::string TracyLlmTools::SourceFile( const std::string& file, uint32_t line ) const
+std::string TracyLlmTools::SourceFile( const std::string& file, uint32_t line, uint32_t context, uint32_t contextBack ) const
 {
     if( line == 0 ) return "Error: Source file line number must be greater than 0.";
 
@@ -770,37 +875,150 @@ std::string TracyLlmTools::SourceFile( const std::string& file, uint32_t line ) 
     uint32_t minLine = line;
     uint32_t maxLine = line+1;
 
-    while( minLine > 0 || maxLine < lines.size() )
+    while( ( context > 0 && maxLine < lines.size() ) || ( contextBack > 0 && minLine > 0 ) )
     {
-        if( minLine > 0 )
+        if( context > 0 && maxLine < lines.size() )
         {
-            size += lines[minLine].size() * 3 + 30;
-            if( size >= maxSize ) break;
-            minLine--;
-        }
-        if( maxLine < lines.size() )
-        {
-            size += lines[maxLine].size() * 3 + 30;
+            size += lines[maxLine].size() + 7;
             if( size >= maxSize ) break;
             maxLine++;
+            context--;
+        }
+        if( contextBack > 0 && minLine > 0 )
+        {
+            size += lines[minLine].size() + 7;
+            if( size >= maxSize ) break;
+            minLine--;
+            contextBack--;
         }
     }
 
     nlohmann::json json = {
         { "file", file },
-        { "contents", nlohmann::json::array() }
+        { "hint", "Each line starts with a line number, then ':', then the actual line content." },
     };
 
+    std::string contents;
     for( uint32_t i = minLine; i < maxLine; i++ )
     {
-        nlohmann::json lineJson = {
-            { "line", i + 1 },
-            { "text", lines[i] }
-        };
-        json["contents"].emplace_back( std::move( lineJson ) );
+        contents += std::to_string( i+1 ) + ":" + lines[i] + "\n";
     }
 
-    return json.dump( 2, ' ', false, nlohmann::json::error_handler_t::replace );
+    json.push_back( { "contents", std::move( contents ) } );
+
+    return json.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
+}
+
+std::string TracyLlmTools::SourceSearch( std::string query, bool caseInsensitive, const std::string& path ) const
+{
+    auto& cache = m_worker.GetSourceFileCache();
+    nlohmann::json json = {
+        { "hint", "Each line starts with a line number, then ':', then the actual line content." }
+    };
+
+    if( caseInsensitive ) std::ranges::transform( query, query.begin(), []( char c ) { return std::tolower( c ); } );
+    std::regex rx, rxPath;
+    try
+    {
+        rx = std::regex( query );
+    }
+    catch( const std::regex_error& e )
+    {
+        return "Error: Invalid query regex: " + std::string( e.what() );
+    }
+    if( !path.empty() )
+    {
+        try
+        {
+            rxPath = std::regex( path );
+        }
+        catch( const std::regex_error& e )
+        {
+            return "Error: Invalid path regex: " + std::string( e.what() );
+        }
+    }
+
+    std::vector<std::string> matches;
+    size_t total = 0;
+    for( auto& item : cache )
+    {
+        if( IsFrameExternal( item.first, nullptr ) ) continue;
+        if( !path.empty() && !std::regex_search( item.first, rxPath ) ) continue;
+
+        char* tmp = nullptr;
+        auto& mem = item.second;
+        auto start = mem.data;
+        auto end = start + mem.len;
+
+        if( caseInsensitive )
+        {
+            tmp = new char[mem.len];
+            std::transform( start, end, tmp, []( char c ) { return std::tolower( c ); } );
+            start = tmp;
+            end = tmp + mem.len;
+        }
+
+        std::vector<size_t> res;
+        auto lines = SplitLines( start, mem.len );
+        for( size_t idx = 0; idx < lines.size(); idx++ )
+        {
+            if( std::regex_search( lines[idx], rx ) )
+            {
+                res.emplace_back( idx );
+                total++;
+            }
+        }
+        if( res.empty() ) continue;
+
+        std::string r;
+        if( caseInsensitive )
+        {
+            auto linesOrig = SplitLines( mem.data, mem.len );
+            for( auto& line : res )
+            {
+                r += std::to_string( line + 1 ) + ":" + linesOrig[line] + "\n";
+            }
+        }
+        else
+        {
+            for( auto& line : res )
+            {
+                r += std::to_string( line + 1 ) + ":" + lines[line] + "\n";
+            }
+        }
+
+        matches.emplace_back( item.first );
+        json.push_back( { item.first, std::move( r ) } );
+
+        delete[] tmp;
+    }
+
+    if( total == 0 ) return "No matches found.";
+    auto ret = json.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
+    if( json.size() > 1 && ret.size() > CalcMaxSize() )
+    {
+        std::string r;
+        for( auto& v : matches )
+        {
+            r += v + "\n";
+        }
+
+        json = {
+            { "hint", "Too many matches found to show all data. Narrow down the search to get line numbers." },
+            { "matches", std::move( r ) },
+        };
+
+        ret = json.dump( -1, ' ', false, nlohmann::json::error_handler_t::replace );
+        if( ret.size() > CalcMaxSize() ) return "Too many matches found.";
+    }
+    return ret;
+}
+
+std::string TracyLlmTools::GetSkill( const std::string& name ) const
+{
+    auto it = std::ranges::find_if( m_skills, [&name]( const auto& skill ) { return skill.name == name; } );
+    if( it == m_skills.end() ) return "No such skill.";
+    return it->content;
 }
 
 }

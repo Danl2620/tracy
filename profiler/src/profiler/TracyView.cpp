@@ -59,11 +59,12 @@ View::View( void(*cbMainThread)(const std::function<void()>&, bool), const char*
     , m_horizontalScrollMultiplier( s_config.horizontalScrollMultiplier )
     , m_verticalScrollMultiplier( s_config.verticalScrollMultiplier )
     , m_manualData( std::make_shared<TracyManualData>() )
+    , m_markdown( this, &m_worker )
 #ifdef __EMSCRIPTEN__
     , m_td( 2, "ViewMt" )
 #else
     , m_td( std::thread::hardware_concurrency(), "ViewMt" )
-    , m_llm( m_worker, *m_manualData )
+    , m_llm( m_worker, *this, *m_manualData )
 #endif
 {
     InitTextEditor();
@@ -89,11 +90,12 @@ View::View( void(*cbMainThread)(const std::function<void()>&, bool), FileRead& f
     , m_horizontalScrollMultiplier( s_config.horizontalScrollMultiplier )
     , m_verticalScrollMultiplier( s_config.verticalScrollMultiplier )
     , m_manualData( std::make_shared<TracyManualData>() )
+    , m_markdown( this, &m_worker )
 #ifdef __EMSCRIPTEN__
     , m_td( 2, "ViewMt" )
 #else
     , m_td( std::thread::hardware_concurrency(), "ViewMt" )
-    , m_llm( m_worker, *m_manualData )
+    , m_llm( m_worker, *this, *m_manualData )
 #endif
 {
     m_notificationTime = 4;
@@ -109,7 +111,6 @@ View::View( void(*cbMainThread)(const std::function<void()>&, bool), FileRead& f
     m_userData.LoadAnnotations( m_annotations );
     m_sourceRegexValid = m_userData.LoadSourceSubstitutions( m_sourceSubstitutions );
 
-    if( m_worker.GetCallstackFrameCount() == 0 ) m_showUnknownFrames = false;
     if( m_worker.GetCallstackSampleCount() == 0 ) m_showAllSymbols = true;
 
     Achieve( "loadTrace" );
@@ -686,7 +687,7 @@ static const char* MainWindowButtons[] = {
     ICON_FA_SQUARE " Stopped"
 };
 
-enum { MainWindowButtonsCount = sizeof( MainWindowButtons ) / sizeof( *MainWindowButtons ) };
+constexpr size_t MainWindowButtonsCount = sizeof( MainWindowButtons ) / sizeof( *MainWindowButtons );
 
 bool View::DrawImpl()
 {
@@ -702,7 +703,7 @@ bool View::DrawImpl()
         ImGui::Spacing();
         ImGui::PopFont();
         ImGui::TextUnformatted( "Waiting for connection…" );
-        DrawWaitingDots( s_time );
+        DrawWaitingDotsCentered( s_time );
         ImGui::End();
         return keepOpen;
     }
@@ -756,7 +757,7 @@ bool View::DrawImpl()
     }
 
     const auto& io = ImGui::GetIO();
-    m_wasActive = false;
+    m_wasActive.store( false, std::memory_order_release );
 
     assert( m_shortcut == ShortcutAction::None );
     if( io.KeyCtrl )
@@ -910,7 +911,7 @@ bool View::DrawImpl()
     ImGui::SameLine();
     ToggleButton( ICON_FA_GEAR, m_showOptions );
     ImGui::SameLine();
-    ToggleButton( ICON_FA_TAGS " Messages", m_showMessages );
+    ToggleButton( ICON_FA_COMMENT " Messages", m_showMessages );
     ImGui::SameLine();
     ToggleButton( ICON_FA_MAGNIFYING_GLASS " Find", m_findZone.show );
     ImGui::SameLine();
@@ -1159,7 +1160,7 @@ bool View::DrawImpl()
     if( m_memInfo.show ) DrawMemory();
     if( m_memInfo.showAllocList ) DrawAllocList();
     if( m_compare.show ) DrawCompare();
-    if( m_callstackInfoWindow != 0 ) DrawCallstackWindow();
+    if( m_callstackView.id != 0 ) DrawCallstackWindow();
     if( m_memoryAllocInfoWindow >= 0 ) DrawMemoryAllocWindow();
     if( m_showInfo ) DrawInfo();
     if( m_sourceViewFile ) DrawTextEditor();
@@ -1252,14 +1253,18 @@ bool View::DrawImpl()
         }
     }
 
-    m_wasActive |= m_callstackBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_sampleParentBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_callstackTreeBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_zoneinfoBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_findZoneBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_optionsLockBuzzAnim.Update( io.DeltaTime );
-    m_wasActive |= m_lockInfoAnim.Update( io.DeltaTime );
-    m_wasActive |= m_statBuzzAnim.Update( io.DeltaTime );
+    bool active = m_wasActive.load( std::memory_order_acquire );
+
+    active |= m_callstackBuzzAnim.Update( io.DeltaTime );
+    active |= m_sampleParentBuzzAnim.Update( io.DeltaTime );
+    active |= m_callstackTreeBuzzAnim.Update( io.DeltaTime );
+    active |= m_zoneinfoBuzzAnim.Update( io.DeltaTime );
+    active |= m_findZoneBuzzAnim.Update( io.DeltaTime );
+    active |= m_optionsLockBuzzAnim.Update( io.DeltaTime );
+    active |= m_lockInfoAnim.Update( io.DeltaTime );
+    active |= m_statBuzzAnim.Update( io.DeltaTime );
+
+    m_wasActive.store( active, std::memory_order_release );
 
     if( m_firstFrame )
     {
@@ -1309,14 +1314,17 @@ bool View::DrawImpl()
         TextFocused( "Reason:", m_worker.GetString( crash.message ) );
         if( crash.callstack != 0 )
         {
-            bool hilite = m_callstackInfoWindow == crash.callstack;
+            bool hilite = m_callstackView.id == crash.callstack;
             if( hilite )
             {
                 SetButtonHighlightColor();
             }
             if( ImGui::Button( ICON_FA_ALIGN_JUSTIFY " Call stack" ) )
             {
-                m_callstackInfoWindow = crash.callstack;
+                m_callstackView = {
+                    .id = crash.callstack,
+                    .thread = crash.thread
+                };
             }
             if( hilite )
             {
@@ -1492,7 +1500,7 @@ void View::SelectThread( uint64_t thread )
 
 bool View::WasActive() const
 {
-    return m_wasActive ||
+    return m_wasActive.load( std::memory_order_acquire ) ||
         m_zoomAnim.active ||
         m_notificationTime > 0 ||
         !m_playback.pause ||
@@ -1503,7 +1511,7 @@ bool View::WasActive() const
 void View::AddLlmAttachment( const nlohmann::json& json )
 {
 #ifndef __EMSCRIPTEN__
-    m_llm.AddAttachment( json.dump( 2 ), "user" );
+    m_llm.AddAttachmentLocking( json.dump(), "user" );
     m_llm.m_show = true;
 #endif
 }
@@ -1512,10 +1520,18 @@ void View::AddLlmQuery( const char* query )
 {
 #ifndef __EMSCRIPTEN__
     std::string str( query );
-    m_llm.AddMessage( std::move( str ), "user" );
+    m_llm.AddMessageLocking( std::move( str ), "user" );
     m_llm.m_show = true;
-    m_llm.QueueSendMessage();
+    m_llm.QueueSendMessageLocking();
 #endif
+}
+
+void View::ViewCallstack( uint32_t callstack, uint32_t thread )
+{
+    m_callstackView = {
+        .id = callstack,
+        .thread = thread
+    };
 }
 
 }

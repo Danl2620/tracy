@@ -2,6 +2,23 @@
 {
   "type": "function",
   "function": {
+    "name": "skill",
+    "description": "Learn a specialized skill for the task needing specific knowledge.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the skill, chosen from the list of available skills."
+        }
+      },
+      "required": ["name"]
+    }
+  }
+},
+{
+  "type": "function",
+  "function": {
     "name": "search_wikipedia",
     "description": "Search the Wikipedia with given query. The `key` field in the response is the Wikipedia page name. Uses network.",
     "parameters": {
@@ -117,7 +134,7 @@
   "type": "function",
   "function": {
     "name": "source_file",
-    "description": "Retrieve the source file contents.",
+    "description": "Retrieve the user program source file contents around given line.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -127,10 +144,43 @@
         },
         "line": {
           "type": "integer",
-          "description": "Line number that should be retrieved."
+          "description": "Target line number."
+        },
+        "context": {
+          "type": "integer",
+          "description": "How many lines to get after the target line. Default: 2."
+        },
+        "context_back": {
+          "type": "integer",
+          "description": "How many lines to get before the target line. Default: 2."
         }
       },
       "required": ["file", "line"]
+    }
+  }
+},
+{
+  "type": "function",
+  "function": {
+    "name": "source_search",
+    "description": "Search user program source files for given keyword.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "ECMAScript regex to search for."
+        },
+        "case_insensitive": {
+          "type": "boolean",
+          "description": "Case insensitive search."
+        },
+        "path": {
+          "type": "string",
+          "description": "File path ECMAScript regex."
+        }
+      },
+      "required": ["query"]
     }
   }
 }
