@@ -1,5 +1,8 @@
 set shell := ["bash", "-cu"]
 
+_default:
+  just --list
+
 # Build project with CMake into the `build/` directory
 # Usage: `just build` or override jobs: `JOBS=4 just build`
 build dir=".":
